@@ -509,6 +509,27 @@ Dos cosas más encontradas usando la app:
   recetas de Fase 11. `ProductCostRow` agrega el mismo botón "Receta"
   (reutiliza `RecipeEditor` de `/sales`, no hay lógica duplicada) también acá.
 
+## Fase 14 — Import histórico agregado de ventas (ver migración 0035)
+
+`import_order()` (0029, Fase 7) acepta fecha histórica pero solo crea el
+pedido a nivel total, sin `order_items` — documentado ahí mismo. El motor de
+rentabilidad (`sales_summary_by_product_channel`, 0025) agrupa por
+`order_items.product_id`: un pedido sin líneas no aporta nada a ningún
+cálculo de margen por producto. `import_historical_product_sale()` es la
+función que faltaba: un pedido + una línea por producto/canal/período, a
+partir de datos ya agregados (unidades totales + ticket promedio de un
+reporte de PedidosYa) — no pretende ser el detalle venta por venta, que el
+dueño del negocio decidió explícitamente no cargar.
+
+**Limitación real, documentada a propósito**: todas las unidades de un
+producto quedan estampadas en una sola fecha (fin del período importado).
+Correcto para sumar ingresos/margen de todo el período — que es lo único
+que necesita el motor de rentabilidad — pero **no debe usarse** para nada
+que dependa de la distribución diaria real (proyección de objetivos,
+consumo estimado de stock). Esos motores seguirán viendo estos pedidos
+importados como si fueran ventas de un solo día, lo cual los distorsionaría
+si se les diera de comer estos datos para ese fin.
+
 ## Qué falta después de Fase 1
 
 Ver el roadmap en los documentos de arquitectura entregados. Fase 2 es el
