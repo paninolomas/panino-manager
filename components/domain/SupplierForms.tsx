@@ -282,25 +282,46 @@ export function NewObligationForm({ suppliers }: { suppliers: Supplier[] }) {
   );
 }
 
+/** Selector de cuenta + confirmación antes de pagar -- mismo fix que PayExpenseButton/CollectSettlementButton. */
 export function PayObligationButton({ obligationId, accounts }: { obligationId: string; accounts: Account[] }) {
   const router = useRouter();
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handlePay() {
-    if (accounts.length === 0) return;
+    if (!accountId) return;
+    const accountName = accounts.find((a) => a.id === accountId)?.name ?? "la cuenta elegida";
+    if (!confirm(`¿Confirmás el pago desde ${accountName}? Se registra como egreso hoy.`)) return;
     setLoading(true);
+    setError(null);
     const res = await fetch(`/api/suppliers/obligations/${obligationId}/pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId: accounts[0].id, date: new Date().toISOString().slice(0, 10) }),
+      body: JSON.stringify({ accountId, date: new Date().toISOString().slice(0, 10) }),
     });
     setLoading(false);
-    if (res.ok) router.refresh();
+    if (!res.ok) {
+      const parsed = await res.json().catch(() => null);
+      setError(parsed?.error?.toString() ?? "No se pudo registrar el pago.");
+      return;
+    }
+    router.refresh();
   }
 
   return (
-    <button className="btn btn-secondary" onClick={handlePay} disabled={loading} style={{ padding: "4px 10px", fontSize: 13 }}>
-      {loading ? "…" : `Pagar desde ${accounts[0]?.name ?? "cuenta"}`}
-    </button>
+    <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      {error && <span style={{ color: "var(--risk)", fontSize: 12 }}>{error}</span>}
+      <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={{ fontSize: 13 }}>
+        {accounts.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name}
+          </option>
+        ))}
+      </select>
+      <button className="btn btn-secondary" onClick={handlePay} disabled={loading || !accountId} style={{ padding: "4px 10px", fontSize: 13 }}>
+        {loading ? "…" : "Pagar"}
+      </button>
+    </span>
   );
 }

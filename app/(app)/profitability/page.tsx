@@ -1,4 +1,5 @@
 import { listProducts, listChannels } from "../../../lib/repositories/sales.repo";
+import { listStockItems } from "../../../lib/repositories/stock.repo";
 import { listLatestMarginSnapshots } from "../../../lib/repositories/profitability.repo";
 import { requireSocio } from "../../../lib/auth/session";
 import {
@@ -9,7 +10,7 @@ import {
 } from "../../../lib/services/profitability-engine";
 import type { MarginSnapshot } from "../../../types/domain";
 import {
-  EditProductCostForm,
+  ProductCostRow,
   SetChannelPriceForm,
   GenerateProfitabilityForm,
 } from "../../../components/domain/ProfitabilityForms";
@@ -25,10 +26,11 @@ const MARGIN_DROP_THRESHOLD = 0.02; // 2 puntos porcentuales, mismo umbral que l
 
 export default async function ProfitabilityPage() {
   await requireSocio();
-  const [products, channels, rawSnapshots] = await Promise.all([
+  const [products, channels, rawSnapshots, stockItems] = await Promise.all([
     listProducts(),
     listChannels(),
     listLatestMarginSnapshots(),
+    listStockItems(),
   ]);
 
   const productName = (id: string) => products.find((p) => p.id === id)?.name ?? "—";
@@ -139,10 +141,7 @@ export default async function ProfitabilityPage() {
       <section className="card stack">
         <h2 style={{ fontSize: 16 }}>Costo actual por producto</h2>
         {products.map((p) => (
-          <div key={p.id} className="row" style={{ alignItems: "center" }}>
-            <span>{p.name}</span>
-            <EditProductCostForm product={p} currentCost={Number((p as { current_cost: number }).current_cost)} />
-          </div>
+          <ProductCostRow key={p.id} product={p} currentCost={Number((p as { current_cost: number }).current_cost)} stockItems={stockItems} />
         ))}
       </section>
 

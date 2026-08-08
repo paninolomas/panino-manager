@@ -2,9 +2,52 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { RecipeEditor } from "./SalesForms";
 
 type Product = { id: string; name: string };
 type Channel = { id: string; name: string };
+type StockItem = { id: string; name: string; unit: string };
+type RecipeLine = { stockItemId: string; stockItemName: string; unit: string; quantity: number; unitCost: number };
+
+/**
+ * Costo manual (EditProductCostForm, ya existía) + botón "Receta" que abre
+ * el mismo RecipeEditor de /sales (Fase 11) -- antes esta pantalla solo
+ * tenía el campo de costo plano, sin acceso al desglose por insumo.
+ */
+export function ProductCostRow({ product, currentCost, stockItems }: { product: Product; currentCost: number; stockItems: StockItem[] }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [recipe, setRecipe] = useState<RecipeLine[] | null>(null);
+
+  async function toggle() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (recipe === null) {
+      setLoading(true);
+      const res = await fetch(`/api/sales/products/${product.id}/recipe`);
+      setLoading(false);
+      if (res.ok) setRecipe(await res.json());
+    }
+  }
+
+  return (
+    <div className="stack" style={{ paddingBottom: 4 }}>
+      <div className="row" style={{ alignItems: "center" }}>
+        <span>{product.name}</span>
+        <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <EditProductCostForm product={product} currentCost={currentCost} />
+          <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={toggle}>
+            Receta
+          </button>
+        </span>
+      </div>
+      {open && (loading ? <p style={{ color: "var(--ink-soft)", paddingLeft: 12 }}>Cargando…</p> : <RecipeEditor productId={product.id} stockItems={stockItems} initialRecipe={recipe ?? []} />)}
+    </div>
+  );
+}
 
 export function EditProductCostForm({ product, currentCost }: { product: Product; currentCost: number }) {
   const router = useRouter();

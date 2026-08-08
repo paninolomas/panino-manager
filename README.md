@@ -493,6 +493,22 @@ plata se hubiera revertido, inconsistente entre las dos tablas.
 - `CollectSettlementButton` ahora pide confirmación y deja elegir cualquier
   cuenta (antes iba directo a la primera de la lista sin preguntar).
 
+## Fase 13 — Elegir cuenta al pagar (todos los módulos) + receta desde Rentabilidad
+
+Dos cosas más encontradas usando la app:
+
+- **"que me deje elegir por qué medio de pago"**: el mismo bug de
+  `CollectSettlementButton` (Fase 12: iba directo a la primera cuenta de la
+  lista, sin preguntar) estaba también en `PayExpenseButton`,
+  `PayObligationButton` y `PayCommissionButton` — los cuatro botones de
+  "pagar/cobrar" de toda la app compartían el mismo problema. Los cuatro
+  ahora piden confirmación y dejan elegir cualquier cuenta.
+- **"en rentabilidad no tengo abierto por insumo"**: `/profitability` tenía
+  su propia sección "Costo actual por producto" con el campo de costo plano
+  de siempre, separada de la de `/sales` — nunca se conectó al editor de
+  recetas de Fase 11. `ProductCostRow` agrega el mismo botón "Receta"
+  (reutiliza `RecipeEditor` de `/sales`, no hay lógica duplicada) también acá.
+
 ## Qué falta después de Fase 1
 
 Ver el roadmap en los documentos de arquitectura entregados. Fase 2 es el
