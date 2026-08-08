@@ -2,8 +2,108 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiAction } from "../../lib/client/api-action";
 
-type StockItem = { id: string; name: string; unit: string };
+type StockItem = { id: string; name: string; unit: string; min_stock?: number; safety_stock?: number };
+type StockMovement = { id: string; stockItemId: string; quantity: number; direction: "entrada" | "salida"; date: string; originType: string };
+
+/** Botón inline para editar nombre/unidad/stock mínimo/de seguridad de un insumo, y desactivarlo. Sin borrado real -- product_recipe_items/stock_movements referencian stock_item_id por FK. */
+export function StockItemEditToggle({ item }: { item: StockItem }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(item.name);
+  const [unit, setUnit] = useState(item.unit);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    const result = await apiAction(`/api/stock-items/${item.id}`, "PATCH", { name, unit });
+    if (!result.ok) return setError(result.error ?? null);
+    setEditing(false);
+    router.refresh();
+  }
+
+  async function deactivate() {
+    if (!confirm("¿Desactivar este insumo? Deja de aparecer para nuevos movimientos, el historial no se toca.")) return;
+    const result = await apiAction(`/api/stock-items/${item.id}`, "PATCH", { active: false });
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  if (editing) {
+    return (
+      <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        {error && <span style={{ color: "var(--risk)", fontSize: 12 }}>{error}</span>}
+        <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: 140 }} />
+        <input value={unit} onChange={(e) => setUnit(e.target.value)} style={{ width: 70 }} />
+        <button className="btn" type="button" onClick={save} style={{ padding: "4px 10px", fontSize: 13 }}>
+          Guardar
+        </button>
+        <button className="btn-secondary" type="button" onClick={() => setEditing(false)} style={{ padding: "4px 10px", fontSize: 13 }}>
+          Cancelar
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => setEditing(true)}>
+        Editar
+      </button>
+      <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={deactivate}>
+        Desactivar
+      </button>
+    </span>
+  );
+}
+
+/** Lista de últimos movimientos de stock con botón "Revertir" -- reverse_stock_movement() (0026) ya existía, solo le faltaba UI. Insumos ya revertidos rechazan un segundo click (one_reversal_per_stock_movement, 0026); el error del RPC se muestra tal cual. */
+export function StockMovementsList({ movements, itemName, itemUnit }: { movements: StockMovement[]; itemName: (id: string) => string; itemUnit: (id: string) => string }) {
+  const router = useRouter();
+  const [reversingId, setReversingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function reverse(id: string) {
+    if (!confirm("¿Revertir este movimiento? Se crea un movimiento inverso, no se borra el original.")) return;
+    setReversingId(id);
+    const result = await apiAction(`/api/stock-movements/${id}/reverse`, "POST", {});
+    setReversingId(null);
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  if (movements.length === 0) return <p style={{ color: "var(--ink-soft)" }}>Sin movimientos todavía.</p>;
+
+  return (
+    <div className="stack">
+      {error && <div className="error-banner">{error}</div>}
+      {movements.slice(0, 20).map((m) => (
+        <div key={m.id} className="row" style={{ alignItems: "center" }}>
+          <span>
+            {itemName(m.stockItemId)} · <span style={{ color: "var(--ink-soft)" }}>{m.originType}</span>
+          </span>
+          <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span className="figure" style={{ color: m.direction === "salida" ? "var(--risk)" : "var(--positive)" }}>
+              {m.direction === "salida" ? "-" : "+"}
+              {m.quantity} {itemUnit(m.stockItemId)}
+            </span>
+            {m.originType !== "reversal" && (
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 13 }}
+                type="button"
+                disabled={reversingId === m.id}
+                onClick={() => reverse(m.id)}
+              >
+                {reversingId === m.id ? "…" : "Revertir"}
+              </button>
+            )}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function NewStockItemForm() {
   const router = useRouter();

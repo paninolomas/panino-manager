@@ -2,8 +2,77 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiAction } from "../../lib/client/api-action";
 
 type Account = { id: string; name: string; type: string };
+
+/** Lista de cuentas con edición de nombre y desactivar inline -- reemplaza el bloque estático que había en accounts/page.tsx. No hay borrado real: cash_movements referencia account_id por FK. */
+export function AccountsList({ accounts }: { accounts: Account[] }) {
+  const router = useRouter();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function startEdit(a: Account) {
+    setEditingId(a.id);
+    setName(a.name);
+    setError(null);
+  }
+
+  async function saveEdit(id: string) {
+    const result = await apiAction(`/api/accounts/${id}`, "PATCH", { name });
+    if (!result.ok) {
+      setError(result.error ?? null);
+      return;
+    }
+    setEditingId(null);
+    router.refresh();
+  }
+
+  async function deactivate(id: string) {
+    if (!confirm("¿Desactivar esta cuenta? Deja de aparecer para nuevos movimientos, pero el historial no se toca.")) return;
+    const result = await apiAction(`/api/accounts/${id}`, "PATCH", { active: false });
+    if (!result.ok) {
+      setError(result.error ?? null);
+      return;
+    }
+    router.refresh();
+  }
+
+  if (accounts.length === 0) return <p style={{ color: "var(--ink-soft)" }}>Todavía no hay cuentas cargadas.</p>;
+
+  return (
+    <div className="stack">
+      {error && <div className="error-banner">{error}</div>}
+      {accounts.map((a) =>
+        editingId === a.id ? (
+          <div key={a.id} className="row" style={{ gap: 8 }}>
+            <input value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1 }} />
+            <button className="btn" type="button" onClick={() => saveEdit(a.id)}>
+              Guardar
+            </button>
+            <button className="btn-secondary" type="button" onClick={() => setEditingId(null)}>
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <div key={a.id} className="row" style={{ alignItems: "center" }}>
+            <span>{a.name}</span>
+            <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span className="pill">{a.type}</span>
+              <button className="btn-secondary" type="button" onClick={() => startEdit(a)}>
+                Editar
+              </button>
+              <button className="btn-secondary" type="button" onClick={() => deactivate(a.id)}>
+                Desactivar
+              </button>
+            </span>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
 
 export function NewAccountForm() {
   const router = useRouter();

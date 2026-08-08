@@ -2,9 +2,122 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiAction } from "../../lib/client/api-action";
 
 type Channel = { id: string; name: string };
 type Product = { id: string; name: string };
+
+/**
+ * Lista de productos con editar nombre/costo/desactivar + precio por canal.
+ * El precio queda versionado (valid_from/valid_to) por el RPC set_channel_price
+ * (0024) -- ya existía desde Fase 2, solo le faltaba un form que lo llamara.
+ * Sin borrado real -- channel_prices/order_items referencian product_id por FK.
+ */
+export function ProductsList({ products, channels }: { products: { id: string; name: string; current_cost: number }[]; channels: Channel[] }) {
+  const router = useRouter();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [cost, setCost] = useState("");
+  const [priceFormId, setPriceFormId] = useState<string | null>(null);
+  const [channelId, setChannelId] = useState(channels[0]?.id ?? "");
+  const [price, setPrice] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function startEdit(p: { id: string; name: string; current_cost: number }) {
+    setEditingId(p.id);
+    setName(p.name);
+    setCost(String(p.current_cost));
+    setError(null);
+  }
+
+  async function saveEdit(id: string) {
+    const [nameResult, costResult] = await Promise.all([
+      apiAction(`/api/sales/products/${id}`, "PATCH", { name }),
+      apiAction(`/api/sales/products/${id}/cost`, "POST", { currentCost: Number(cost) || 0 }),
+    ]);
+    if (!nameResult.ok) return setError(nameResult.error ?? null);
+    if (!costResult.ok) return setError(costResult.error ?? null);
+    setEditingId(null);
+    router.refresh();
+  }
+
+  async function deactivate(id: string) {
+    if (!confirm("¿Desactivar este producto? Deja de aparecer para nuevas ventas, el historial no se toca.")) return;
+    const result = await apiAction(`/api/sales/products/${id}`, "PATCH", { active: false });
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  async function savePrice(productId: string) {
+    const result = await apiAction("/api/channel-prices", "POST", { productId, channelId, price: Number(price) });
+    if (!result.ok) return setError(result.error ?? null);
+    setPriceFormId(null);
+    setPrice("");
+    router.refresh();
+  }
+
+  if (products.length === 0) return <p style={{ color: "var(--ink-soft)" }}>No hay productos cargados.</p>;
+
+  return (
+    <div className="stack">
+      {error && <div className="error-banner">{error}</div>}
+      {products.map((p) => (
+        <div key={p.id} className="stack" style={{ paddingBottom: 4 }}>
+          {editingId === p.id ? (
+            <div className="row" style={{ gap: 8 }}>
+              <input value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1 }} />
+              <input type="number" min="0" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} style={{ width: 120 }} />
+              <button className="btn" type="button" onClick={() => saveEdit(p.id)}>
+                Guardar
+              </button>
+              <button className="btn-secondary" type="button" onClick={() => setEditingId(null)}>
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <div className="row">
+              <span>{p.name}</span>
+              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span className="figure" style={{ color: "var(--ink-soft)" }}>
+                  costo ${p.current_cost}
+                </span>
+                <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => startEdit(p)}>
+                  Editar
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: "4px 10px", fontSize: 13 }}
+                  type="button"
+                  onClick={() => setPriceFormId(priceFormId === p.id ? null : p.id)}
+                >
+                  Precio por canal
+                </button>
+                <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => deactivate(p.id)}>
+                  Desactivar
+                </button>
+              </span>
+            </div>
+          )}
+          {priceFormId === p.id && (
+            <div className="row" style={{ gap: 8, paddingLeft: 12 }}>
+              <select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+                {channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <input type="number" min="0" step="0.01" placeholder="Precio" value={price} onChange={(e) => setPrice(e.target.value)} style={{ width: 120 }} />
+              <button className="btn" type="button" onClick={() => savePrice(p.id)}>
+                Guardar precio
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function NewSaleForm({ channels, products }: { channels: Channel[]; products: Product[] }) {
   const router = useRouter();

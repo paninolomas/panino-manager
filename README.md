@@ -409,6 +409,26 @@ TypeScript puro, nunca SQL, mismo principio que el resto de los motores.
 Ver `Fase8_Marca_Recetas_Insumos_Arquitectura.md` para el detalle completo
 de las decisiones.
 
+## Fase 9 — Editar/desactivar en todos los módulos (ver migración 0032)
+
+Auditoría real de la app: ningún módulo tenía edición ni borrado más allá de
+un puñado de acciones puntuales (pay, collect, cost). Se separó en tres
+categorías:
+
+- **Ya existía en la base, solo faltaba UI**: `reverse_movement()` y
+  `reverse_stock_movement()` (Fase 1.1/4) y `set_channel_price()` (Fase 2)
+  estaban implementadas y testeadas hace tiempo — ahora tienen botón.
+- **Inmutable a propósito, no se tocó**: gastos/obligaciones pagados,
+  comisiones/settlements cobrados. La corrección sigue siendo reversión +
+  registro nuevo, nunca un UPDATE directo — mismo criterio de auditoría de
+  siempre.
+- **Gap real, cerrado en 0032 + nuevas rutas/UI**: cuentas, proveedores,
+  gastos pendientes, categorías de gasto, productos/precios por canal,
+  insumos y objetivos ahora se pueden editar y desactivar (o eliminar, en
+  el caso de objetivos, que no tiene ninguna tabla que lo referencie).
+  Ninguna entidad con FKs en contra tiene borrado real — todas usan la
+  columna `active` para soft-delete, mismo patrón que ya usaba `products`.
+
 ## Qué falta después de Fase 1
 
 Ver el roadmap en los documentos de arquitectura entregados. Fase 2 es el

@@ -2,8 +2,66 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiAction } from "../../lib/client/api-action";
 
 type Account = { id: string; name: string };
+type Movement = { id: string; accountId: string; amount: number; direction: "ingreso" | "egreso"; originType: string };
+
+/** Lista de últimos movimientos con botón "Revertir" -- reverse_movement() (0011/0014) ya existía, solo le faltaba UI. Un movimiento ya revertido (o una reversión en sí) no muestra el botón / rechaza el segundo click via el unique index one_reversal_per_movement (0004). */
+export function MovementsList({
+  movements,
+  accountName,
+  formatARS,
+}: {
+  movements: Movement[];
+  accountName: (id: string) => string;
+  formatARS: (n: number) => string;
+}) {
+  const router = useRouter();
+  const [reversingId, setReversingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function reverse(id: string) {
+    if (!confirm("¿Revertir este movimiento? Se crea un movimiento inverso, no se borra el original.")) return;
+    setReversingId(id);
+    const result = await apiAction(`/api/movements/${id}/reverse`, "POST", {});
+    setReversingId(null);
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  if (movements.length === 0) return <p style={{ color: "var(--ink-soft)" }}>Sin movimientos todavía.</p>;
+
+  return (
+    <div className="stack">
+      {error && <div className="error-banner">{error}</div>}
+      {movements.slice(0, 30).map((m) => (
+        <div key={m.id} className="row" style={{ alignItems: "center" }}>
+          <span>
+            {accountName(m.accountId)} · <span style={{ color: "var(--ink-soft)" }}>{m.originType}</span>
+          </span>
+          <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span className="figure" style={{ color: m.direction === "egreso" ? "var(--risk)" : "var(--positive)" }}>
+              {m.direction === "egreso" ? "-" : "+"}
+              {formatARS(m.amount)}
+            </span>
+            {m.originType !== "reversal" && (
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 13 }}
+                type="button"
+                disabled={reversingId === m.id}
+                onClick={() => reverse(m.id)}
+              >
+                {reversingId === m.id ? "…" : "Revertir"}
+              </button>
+            )}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function ManualMovementForm({ accounts }: { accounts: Account[] }) {
   const router = useRouter();

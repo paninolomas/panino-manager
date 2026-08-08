@@ -2,9 +2,146 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiAction } from "../../lib/client/api-action";
 
 type Supplier = { id: string; name: string; default_payment_terms_days: number };
 type Account = { id: string; name: string };
+type Obligation = { id: string; supplierId: string; amount: number; estimatedDueDate: string; status: string };
+
+/** Lista de proveedores con editar/desactivar. Sin borrado real -- obligations referencia supplier_id por FK. */
+export function SuppliersList({ suppliers }: { suppliers: Supplier[] }) {
+  const router = useRouter();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [terms, setTerms] = useState("0");
+  const [error, setError] = useState<string | null>(null);
+
+  function startEdit(s: Supplier) {
+    setEditingId(s.id);
+    setName(s.name);
+    setTerms(String(s.default_payment_terms_days));
+    setError(null);
+  }
+
+  async function saveEdit(id: string) {
+    const result = await apiAction(`/api/suppliers/${id}`, "PATCH", { name, defaultPaymentTermsDays: Number(terms) });
+    if (!result.ok) return setError(result.error ?? null);
+    setEditingId(null);
+    router.refresh();
+  }
+
+  async function deactivate(id: string) {
+    if (!confirm("¿Desactivar este proveedor? Las obligaciones ya cargadas no se tocan.")) return;
+    const result = await apiAction(`/api/suppliers/${id}`, "PATCH", { active: false });
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  if (suppliers.length === 0) return <p style={{ color: "var(--ink-soft)" }}>Todavía no hay proveedores cargados.</p>;
+
+  return (
+    <div className="stack">
+      {error && <div className="error-banner">{error}</div>}
+      {suppliers.map((s) =>
+        editingId === s.id ? (
+          <div key={s.id} className="row" style={{ gap: 8 }}>
+            <input value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1 }} />
+            <input
+              type="number"
+              min="0"
+              value={terms}
+              onChange={(e) => setTerms(e.target.value)}
+              style={{ width: 80 }}
+            />
+            <button className="btn" type="button" onClick={() => saveEdit(s.id)}>
+              Guardar
+            </button>
+            <button className="btn-secondary" type="button" onClick={() => setEditingId(null)}>
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <div key={s.id} className="row">
+            <span>{s.name}</span>
+            <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span className="pill">{s.default_payment_terms_days} días</span>
+              <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => startEdit(s)}>
+                Editar
+              </button>
+              <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => deactivate(s.id)}>
+                Desactivar
+              </button>
+            </span>
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
+/** Fila de obligación pendiente con editar (monto/vencimiento) + el botón de pagar que ya existía. Solo aplica a pendientes -- una vez pagada, el trigger guard_obligation_immutability (0005) rechaza el cambio y el form ni se muestra. */
+export function ObligationRow({
+  obligation,
+  supplierName,
+  accounts,
+}: {
+  obligation: Obligation;
+  supplierName: string;
+  accounts: Account[];
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [amount, setAmount] = useState(String(obligation.amount));
+  const [dueDate, setDueDate] = useState(obligation.estimatedDueDate);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    const result = await apiAction(`/api/suppliers/obligations/${obligation.id}`, "PATCH", {
+      amount: Number(amount),
+      estimatedDueDate: dueDate,
+    });
+    if (!result.ok) return setError(result.error ?? null);
+    setEditing(false);
+    router.refresh();
+  }
+
+  function formatARS(n: number) {
+    return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
+  }
+
+  if (editing) {
+    return (
+      <div className="stack" style={{ paddingBottom: 8 }}>
+        {error && <div className="error-banner">{error}</div>}
+        <div className="row" style={{ gap: 8 }}>
+          <input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ width: 120 }} />
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          <button className="btn" type="button" onClick={save}>
+            Guardar
+          </button>
+          <button className="btn-secondary" type="button" onClick={() => setEditing(false)}>
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="row" style={{ alignItems: "center" }}>
+      <span>
+        {supplierName} · <span style={{ color: "var(--ink-soft)" }}>vence {obligation.estimatedDueDate}</span>
+      </span>
+      <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <span className="figure">{formatARS(obligation.amount)}</span>
+        <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => setEditing(true)}>
+          Editar
+        </button>
+        {accounts.length > 0 && <PayObligationButton obligationId={obligation.id} accounts={accounts} />}
+      </span>
+    </div>
+  );
+}
 
 export function NewSupplierForm() {
   const router = useRouter();
