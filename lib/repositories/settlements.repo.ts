@@ -59,6 +59,34 @@ export async function createManualSettlement(input: {
   return data as string;
 }
 
+export async function listCollectedSettlements() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("settlements")
+    .select("id, channel_id, period_start, period_end, gross_amount, commission_amount, net_amount, expected_payment_date, actual_payment_date, status, is_manual, notes")
+    .eq("status", "collected")
+    .order("actual_payment_date", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return data;
+}
+
+export async function reverseSettlementCollection(settlementId: string, description?: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("reverse_settlement_collection", {
+    p_settlement_id: settlementId,
+    p_description: description ?? "Reversión de cobro de liquidación",
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function deletePendingManualSettlement(settlementId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("delete_pending_manual_settlement", { p_settlement_id: settlementId });
+  if (error) throw error;
+}
+
 export async function generateSettlement(input: { channelId: string; periodStart: string; periodEnd: string }) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("generate_settlement", {

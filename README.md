@@ -473,6 +473,26 @@ cargado 3 productos a mano por SQL. Se agrega:
   por insumo — se completan los que aplican, se deja el resto vacío, un
   solo "Guardar receta" manda todo junto.
 
+## Fase 12 — Revertir cobro de liquidación + eliminar manual pendiente (ver migración 0034)
+
+Encontrado al usar la liquidación manual de Fase 10: `collect_settlement()`
+(0018) marca `status='collected'` sin vuelta atrás. El botón "Revertir" de
+`/movements` (Fase 9) deshace el impacto en caja, pero nunca le avisaba a
+la tabla `settlements` — quedaba marcada "cobrada" para siempre aunque la
+plata se hubiera revertido, inconsistente entre las dos tablas.
+
+- `reverse_settlement_collection()`: mismo patrón que `reverse_expense_payment`
+  (0033) — revierte el movimiento de caja y devuelve la liquidación a
+  `pending`. Nueva sección "Cobradas (historial)" en `/settlements` con el
+  botón.
+- `delete_pending_manual_settlement()`: una liquidación manual cargada con
+  el monto equivocado ahora se puede borrar directamente mientras esté
+  pendiente — **solo** si `is_manual = true` (una generada desde ventas
+  tiene `orders.settlement_id` apuntando a ella, borrarla las dejaría
+  huérfanas; para esas la corrección sigue siendo reversión).
+- `CollectSettlementButton` ahora pide confirmación y deja elegir cualquier
+  cuenta (antes iba directo a la primera de la lista sin preguntar).
+
 ## Qué falta después de Fase 1
 
 Ver el roadmap en los documentos de arquitectura entregados. Fase 2 es el

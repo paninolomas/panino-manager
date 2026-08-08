@@ -136,26 +136,116 @@ export function GenerateSettlementForm({ channels }: { channels: Channel[] }) {
   );
 }
 
+/** Selector de cuenta + confirmación antes de cobrar -- antes iba directo a la primera cuenta de la lista sin preguntar nada. */
 export function CollectSettlementButton({ settlementId, accounts }: { settlementId: string; accounts: Account[] }) {
   const router = useRouter();
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleCollect() {
-    if (accounts.length === 0) return;
+    if (!accountId) return;
+    const accountName = accounts.find((a) => a.id === accountId)?.name ?? "la cuenta elegida";
+    if (!confirm(`¿Confirmás el cobro en ${accountName}? Se registra como ingreso hoy.`)) return;
     setLoading(true);
+    setError(null);
     const res = await fetch(`/api/settlements/${settlementId}/collect`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountId: accounts[0].id, date: todayISO() }),
+      body: JSON.stringify({ accountId, date: todayISO() }),
     });
     setLoading(false);
-    if (res.ok) router.refresh();
+    if (!res.ok) {
+      const parsed = await res.json().catch(() => null);
+      setError(parsed?.error?.toString() ?? "No se pudo registrar el cobro.");
+      return;
+    }
+    router.refresh();
   }
 
   return (
-    <button className="btn btn-secondary" onClick={handleCollect} disabled={loading} style={{ padding: "4px 10px", fontSize: 13 }}>
-      {loading ? "…" : `Cobrar en ${accounts[0]?.name ?? "cuenta"}`}
-    </button>
+    <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      {error && <span style={{ color: "var(--risk)", fontSize: 12 }}>{error}</span>}
+      <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={{ fontSize: 13 }}>
+        {accounts.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name}
+          </option>
+        ))}
+      </select>
+      <button className="btn btn-secondary" onClick={handleCollect} disabled={loading || !accountId} style={{ padding: "4px 10px", fontSize: 13 }}>
+        {loading ? "…" : "Cobrar"}
+      </button>
+    </span>
+  );
+}
+
+/** Fila de liquidación ya cobrada (historial) con "Revertir cobro" -- reverse_settlement_collection (0034) revierte el movimiento de caja Y devuelve la liquidación a pendiente (antes solo se revertía la plata desde /movements, la liquidación quedaba inconsistente marcada "cobrada" para siempre). */
+export function CollectedSettlementRow({
+  settlement,
+  channelName,
+}: {
+  settlement: { id: string; channel_id: string; net_amount: number; actual_payment_date: string | null; is_manual: boolean };
+  channelName: string;
+}) {
+  const router = useRouter();
+  const [reversing, setReversing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function formatARS(n: number) {
+    return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
+  }
+
+  async function reverse() {
+    if (!confirm("¿Revertir este cobro? La liquidación vuelve a quedar pendiente y se puede volver a cobrar (o eliminar, si era manual y estaba mal). No se borra nada, se crea un movimiento inverso.")) return;
+    setReversing(true);
+    const result = await apiAction(`/api/settlements/${settlement.id}/reverse`, "POST", {});
+    setReversing(false);
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  return (
+    <div className="row" style={{ alignItems: "center" }}>
+      {error && <div className="error-banner">{error}</div>}
+      <span>
+        {channelName} · <span style={{ color: "var(--ink-soft)" }}>cobrada {settlement.actual_payment_date}</span>
+        {settlement.is_manual && <span className="pill" style={{ marginLeft: 6 }}>manual</span>}
+      </span>
+      <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <span className="figure" style={{ color: "var(--ink-soft)" }}>
+          {formatARS(settlement.net_amount)}
+        </span>
+        <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" disabled={reversing} onClick={reverse}>
+          {reversing ? "…" : "Revertir cobro"}
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/** Botón para borrar una liquidación manual TODAVÍA PENDIENTE cargada mal -- antes no había forma de sacarla salvo cobrarla igual. Solo aparece para is_manual=true (una generada desde ventas tiene orders asociadas, no se puede borrar así). */
+export function DeletePendingSettlementButton({ settlementId }: { settlementId: string }) {
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    if (!confirm("¿Eliminar esta liquidación cargada a mano? No se puede deshacer.")) return;
+    setDeleting(true);
+    const result = await apiAction(`/api/settlements/${settlementId}`, "DELETE");
+    setDeleting(false);
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  return (
+    <>
+      {error && <span style={{ color: "var(--risk)", fontSize: 12, marginRight: 8 }}>{error}</span>}
+      <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" disabled={deleting} onClick={remove}>
+        {deleting ? "…" : "Eliminar"}
+      </button>
+    </>
   );
 }
 

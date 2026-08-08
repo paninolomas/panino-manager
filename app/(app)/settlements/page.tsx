@@ -1,12 +1,14 @@
 import { listChannels } from "../../../lib/repositories/sales.repo";
 import { listAccounts } from "../../../lib/repositories/accounts.repo";
-import { listPendingSettlements, listPendingCommissionCharges } from "../../../lib/repositories/settlements.repo";
+import { listPendingSettlements, listCollectedSettlements, listPendingCommissionCharges } from "../../../lib/repositories/settlements.repo";
 import { getActiveReserveTarget } from "../../../lib/repositories/reserve.repo";
 import { requireSocio } from "../../../lib/auth/session";
 import {
   GenerateSettlementForm,
   ManualSettlementForm,
   CollectSettlementButton,
+  CollectedSettlementRow,
+  DeletePendingSettlementButton,
   PayCommissionButton,
   AdvanceSimulatorForm,
   ReserveTargetForm,
@@ -18,10 +20,11 @@ function formatARS(n: number) {
 
 export default async function SettlementsPage() {
   await requireSocio();
-  const [channels, accounts, settlements, commissions, reserve] = await Promise.all([
+  const [channels, accounts, settlements, collected, commissions, reserve] = await Promise.all([
     listChannels(),
     listAccounts(),
     listPendingSettlements(),
+    listCollectedSettlements(),
     listPendingCommissionCharges(),
     getActiveReserveTarget(),
   ]);
@@ -48,9 +51,24 @@ export default async function SettlementsPage() {
                 bruto {formatARS(Number(s.gross_amount))} · comisión {formatARS(Number(s.commission_amount))} · vence{" "}
                 {s.expected_payment_date}
               </span>
-              <CollectSettlementButton settlementId={s.id} accounts={accounts} />
+              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {s.is_manual && <DeletePendingSettlementButton settlementId={s.id} />}
+                <CollectSettlementButton settlementId={s.id} accounts={accounts} />
+              </span>
             </div>
           </div>
+        ))}
+      </section>
+
+      <section className="card stack">
+        <div className="label">Cobradas (historial)</div>
+        {collected.length === 0 && <p style={{ color: "var(--ink-soft)" }}>Todavía no hay liquidaciones cobradas.</p>}
+        {collected.map((s) => (
+          <CollectedSettlementRow
+            key={s.id}
+            settlement={{ id: s.id, channel_id: s.channel_id, net_amount: Number(s.net_amount), actual_payment_date: s.actual_payment_date, is_manual: s.is_manual }}
+            channelName={channelName(s.channel_id)}
+          />
         ))}
       </section>
 
