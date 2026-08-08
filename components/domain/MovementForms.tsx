@@ -7,19 +7,16 @@ import { apiAction } from "../../lib/client/api-action";
 type Account = { id: string; name: string };
 type Movement = { id: string; accountId: string; amount: number; direction: "ingreso" | "egreso"; originType: string };
 
-/** Lista de últimos movimientos con botón "Revertir" -- reverse_movement() (0011/0014) ya existía, solo le faltaba UI. Un movimiento ya revertido (o una reversión en sí) no muestra el botón / rechaza el segundo click via el unique index one_reversal_per_movement (0004). */
-export function MovementsList({
-  movements,
-  accountName,
-  formatARS,
-}: {
-  movements: Movement[];
-  accountName: (id: string) => string;
-  formatARS: (n: number) => string;
-}) {
+/** Lista de últimos movimientos con botón "Revertir" -- reverse_movement() (0011/0014) ya existía, solo le faltaba UI. Recibe las cuentas crudas (serializable) en vez de una función -- pasar funciones como prop de Server Component a Client Component no anda en Next.js (rompe con "Minified React error #441"), el lookup y el formateo de moneda se resuelven acá adentro. */
+export function MovementsList({ movements, accounts }: { movements: Movement[]; accounts: Account[] }) {
   const router = useRouter();
   const [reversingId, setReversingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
+  function formatARS(n: number) {
+    return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
+  }
 
   async function reverse(id: string) {
     if (!confirm("¿Revertir este movimiento? Se crea un movimiento inverso, no se borra el original.")) return;

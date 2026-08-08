@@ -57,11 +57,14 @@ export function StockItemEditToggle({ item }: { item: StockItem }) {
   );
 }
 
-/** Lista de últimos movimientos de stock con botón "Revertir" -- reverse_stock_movement() (0026) ya existía, solo le faltaba UI. Insumos ya revertidos rechazan un segundo click (one_reversal_per_stock_movement, 0026); el error del RPC se muestra tal cual. */
-export function StockMovementsList({ movements, itemName, itemUnit }: { movements: StockMovement[]; itemName: (id: string) => string; itemUnit: (id: string) => string }) {
+/** Lista de últimos movimientos de stock con botón "Revertir" -- reverse_stock_movement() (0026) ya existía, solo le faltaba UI. Recibe los insumos crudos (serializable) en vez de funciones -- pasar funciones como prop de Server Component a Client Component no anda en Next.js (rompe con "Minified React error #441"), el lookup se resuelve acá adentro. */
+export function StockMovementsList({ movements, items }: { movements: StockMovement[]; items: StockItem[] }) {
   const router = useRouter();
   const [reversingId, setReversingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const itemName = (id: string) => items.find((i) => i.id === id)?.name ?? "—";
+  const itemUnit = (id: string) => items.find((i) => i.id === id)?.unit ?? "";
 
   async function reverse(id: string) {
     if (!confirm("¿Revertir este movimiento? Se crea un movimiento inverso, no se borra el original.")) return;

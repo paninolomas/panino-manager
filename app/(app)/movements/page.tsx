@@ -2,13 +2,8 @@ import { listAccounts } from "../../../lib/repositories/accounts.repo";
 import { listMovements } from "../../../lib/repositories/movements.repo";
 import { ManualMovementForm, TransferForm, MovementsList } from "../../../components/domain/MovementForms";
 
-function formatARS(n: number) {
-  return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
-}
-
 export default async function MovementsPage() {
   const [accounts, movements] = await Promise.all([listAccounts(), listMovements()]);
-  const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? id;
 
   return (
     <div className="stack">
@@ -16,7 +11,7 @@ export default async function MovementsPage() {
 
       <section className="card stack">
         <div className="label">Últimos movimientos</div>
-        <MovementsList movements={movements} accountName={accountName} formatARS={formatARS} />
+        <MovementsList movements={movements} accounts={accounts} />
       </section>
 
       <section className="card stack">

@@ -109,7 +109,7 @@ export default async function StockPage() {
 
       <section className="card stack">
         <div className="label">Últimos movimientos</div>
-        <StockMovementsList movements={movements} itemName={itemName} itemUnit={itemUnit} />
+        <StockMovementsList movements={movements} items={items} />
       </section>
 
       <section className="card stack">
