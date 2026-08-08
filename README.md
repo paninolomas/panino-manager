@@ -369,6 +369,46 @@ PedidosYa/Rappi/Pedix (tal como pedía explícitamente el prompt original —
   que cargarla o ajustarla manualmente por ahora.
 - Página `/imports`, solo socio.
 
+## Fix post-producción — recursión infinita en RLS de `profiles` (ver migración 0030)
+
+Primer bug real encontrado al correr las migraciones contra un Postgres real
+(todo lo anterior solo se había validado con tests estáticos sobre el texto
+del SQL). La policy `"socio ve profiles de su ubicación"` (0010)
+subconsultaba `profiles` directamente dentro de su propio `USING` —
+Postgres, al evaluar esa policy, vuelve a aplicar RLS sobre esa subconsulta,
+que dispara la misma policy de nuevo: `ERROR 42P17: infinite recursion
+detected in policy for relation "profiles"`. Esto rompía el login: la
+sesión se creaba bien en Supabase Auth, pero el servidor no podía leer el
+`profile` del usuario para armar la sesión de la app, y `requireSession()`
+rebotaba a `/login` en loop.
+
+**Fix**: `current_profile_role()`, una función `security definer` (mismo
+patrón que `current_profile_location()`/`has_permission()`), cuya consulta
+interna a `profiles` corre con privilegios elevados y no vuelve a evaluar
+RLS — corta el ciclo. Agregado además un test estático
+(`tests/services/rls-recursion-guard.test.ts`) que escanea **todas** las
+migraciones y falla si alguna policy vigente subconsulta directamente su
+propia tabla — para que este tipo de bug no se pueda reintroducir sin que
+un test lo note, aunque solo correr contra Postgres real lo hubiera
+atrapado la primera vez.
+
+## Fase 8 — Marca, recetas e insumos con costo (ver migración 0031)
+
+Cierra un hueco documentado desde Fase 4 (`stock-engine.ts`): las recetas
+nunca se habían implementado, `products.current_cost` era un número plano
+cargado a mano, y `stock_items` no guardaba costo unitario en ningún lado.
+
+Agrega `brands` (marca del producto, con `exclusive_channel_id` para reglas
+como "esta marca solo vende en este canal"), `stock_item_costs` (costo de
+insumo versionado en el tiempo, mismo patrón que `channel_prices`) y
+`product_recipe_items` (la receta: qué insumos y en qué cantidad componen
+un producto). Un producto sin filas en `product_recipe_items` sigue usando
+`current_cost` como fallback manual — no rompe nada de lo que ya funciona.
+El cálculo de costo a partir de la receta lo hace `recipe-engine.ts` en
+TypeScript puro, nunca SQL, mismo principio que el resto de los motores.
+Ver `Fase8_Marca_Recetas_Insumos_Arquitectura.md` para el detalle completo
+de las decisiones.
+
 ## Qué falta después de Fase 1
 
 Ver el roadmap en los documentos de arquitectura entregados. Fase 2 es el
