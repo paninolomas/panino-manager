@@ -6,6 +6,95 @@ import { apiAction } from "../../lib/client/api-action";
 
 type Channel = { id: string; name: string };
 type Product = { id: string; name: string };
+type StockItem = { id: string; name: string; unit: string };
+type RecipeLine = { stockItemId: string; stockItemName: string; unit: string; quantity: number; unitCost: number };
+
+/**
+ * Plantilla de insumos por default: en vez de agregar de a uno, se listan
+ * TODOS los insumos del catálogo con un campo de cantidad. El usuario
+ * completa los que aplican al producto y deja el resto en blanco -- un
+ * único "Guardar receta" reemplaza toda la receta de una vez (PUT, no
+ * incremental) y el costo se recalcula y persiste en current_cost del lado
+ * del servidor (recipe-engine.ts), esta UI solo arma el request.
+ */
+export function RecipeEditor({ productId, stockItems, initialRecipe }: { productId: string; stockItems: StockItem[]; initialRecipe: RecipeLine[] }) {
+  const router = useRouter();
+  const initialQuantities: Record<string, string> = {};
+  for (const item of stockItems) {
+    const existing = initialRecipe.find((r) => r.stockItemId === item.id);
+    initialQuantities[item.id] = existing ? String(existing.quantity) : "";
+  }
+  const [quantities, setQuantities] = useState<Record<string, string>>(initialQuantities);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedCost, setSavedCost] = useState<number | null>(null);
+
+  const previewTotal = stockItems.reduce((sum, item) => {
+    const qty = Number(quantities[item.id]);
+    const line = initialRecipe.find((r) => r.stockItemId === item.id);
+    const unitCost = line?.unitCost ?? 0;
+    return sum + (qty > 0 ? qty * unitCost : 0);
+  }, 0);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    const lines = stockItems.map((item) => ({ stockItemId: item.id, quantity: Number(quantities[item.id]) || 0 }));
+    const res = await fetch(`/api/sales/products/${productId}/recipe`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lines }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      const parsed = await res.json().catch(() => null);
+      setError(parsed?.error?.toString() ?? "No se pudo guardar la receta.");
+      return;
+    }
+    const data = await res.json();
+    setSavedCost(data.cost);
+    router.refresh();
+  }
+
+  return (
+    <div className="stack" style={{ paddingLeft: 12, borderLeft: "2px solid var(--line)" }}>
+      {error && <div className="error-banner">{error}</div>}
+      {stockItems.length === 0 && <p style={{ color: "var(--ink-soft)" }}>No hay insumos cargados todavía -- creá algunos en Stock primero.</p>}
+      {stockItems.map((item) => {
+        const line = initialRecipe.find((r) => r.stockItemId === item.id);
+        return (
+          <div key={item.id} className="row" style={{ alignItems: "center", gap: 8 }}>
+            <span style={{ flex: 1 }}>
+              {item.name} <span style={{ color: "var(--ink-soft)", fontSize: 12 }}>({item.unit})</span>
+            </span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="0"
+              value={quantities[item.id]}
+              onChange={(e) => setQuantities((q) => ({ ...q, [item.id]: e.target.value }))}
+              style={{ width: 100 }}
+            />
+            {line && (
+              <span style={{ fontSize: 12, color: "var(--ink-soft)", width: 90, textAlign: "right" }}>
+                ${(line.quantity * line.unitCost).toFixed(2)}
+              </span>
+            )}
+          </div>
+        );
+      })}
+      <div className="row" style={{ alignItems: "center", paddingTop: 8, borderTop: "1px dashed var(--line)" }}>
+        <span className="label">Costo total (con lo tipeado ahora mismo)</span>
+        <span className="figure">${previewTotal.toFixed(2)}</span>
+      </div>
+      <button className="btn" type="button" disabled={saving} onClick={save}>
+        {saving ? "Guardando…" : "Guardar receta"}
+      </button>
+      {savedCost !== null && <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>Guardado. Costo del producto actualizado a ${savedCost.toFixed(2)}.</p>}
+    </div>
+  );
+}
 
 /**
  * Lista de productos con editar nombre/costo/desactivar + precio por canal.
@@ -13,12 +102,15 @@ type Product = { id: string; name: string };
  * (0024) -- ya existía desde Fase 2, solo le faltaba un form que lo llamara.
  * Sin borrado real -- channel_prices/order_items referencian product_id por FK.
  */
-export function ProductsList({ products, channels }: { products: { id: string; name: string; current_cost: number }[]; channels: Channel[] }) {
+export function ProductsList({ products, channels, stockItems }: { products: { id: string; name: string; current_cost: number }[]; channels: Channel[]; stockItems: StockItem[] }) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [cost, setCost] = useState("");
   const [priceFormId, setPriceFormId] = useState<string | null>(null);
+  const [recipeFormId, setRecipeFormId] = useState<string | null>(null);
+  const [recipesByProduct, setRecipesByProduct] = useState<Record<string, RecipeLine[]>>({});
+  const [recipeLoading, setRecipeLoading] = useState<string | null>(null);
   const [channelId, setChannelId] = useState(channels[0]?.id ?? "");
   const [price, setPrice] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +146,25 @@ export function ProductsList({ products, channels }: { products: { id: string; n
     setPriceFormId(null);
     setPrice("");
     router.refresh();
+  }
+
+  async function toggleRecipe(productId: string) {
+    if (recipeFormId === productId) {
+      setRecipeFormId(null);
+      return;
+    }
+    setRecipeFormId(productId);
+    if (!recipesByProduct[productId]) {
+      setRecipeLoading(productId);
+      const res = await fetch(`/api/sales/products/${productId}/recipe`);
+      setRecipeLoading(null);
+      if (res.ok) {
+        const data: RecipeLine[] = await res.json();
+        setRecipesByProduct((prev) => ({ ...prev, [productId]: data }));
+      } else {
+        setError("No se pudo cargar la receta.");
+      }
+    }
   }
 
   if (products.length === 0) return <p style={{ color: "var(--ink-soft)" }}>No hay productos cargados.</p>;
@@ -92,12 +203,21 @@ export function ProductsList({ products, channels }: { products: { id: string; n
                 >
                   Precio por canal
                 </button>
+                <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => toggleRecipe(p.id)}>
+                  Receta
+                </button>
                 <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => deactivate(p.id)}>
                   Desactivar
                 </button>
               </span>
             </div>
           )}
+          {recipeFormId === p.id &&
+            (recipeLoading === p.id ? (
+              <p style={{ color: "var(--ink-soft)", paddingLeft: 12 }}>Cargando…</p>
+            ) : (
+              <RecipeEditor productId={p.id} stockItems={stockItems} initialRecipe={recipesByProduct[p.id] ?? []} />
+            ))}
           {priceFormId === p.id && (
             <div className="row" style={{ gap: 8, paddingLeft: 12 }}>
               <select value={channelId} onChange={(e) => setChannelId(e.target.value)}>

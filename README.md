@@ -452,6 +452,27 @@ Dos pedidos reales de uso, no bugs:
   (nunca lo borran) y devuelven el registro a `pending`, donde el PATCH de
   Fase 9 ya lo puede editar o volver a pagar bien.
 
+## Fase 11 — Editor de recetas con costo calculado (nunca implementado hasta ahora)
+
+Fase 8 dejó las tablas (`product_recipe_items`, `stock_item_costs`) y la
+función de lectura (`product_recipe_with_costs`, 0031), pero nunca el motor
+que calcula el costo ni la UI para cargar la receta — solo se habían
+cargado 3 productos a mano por SQL. Se agrega:
+
+- `lib/services/recipe-engine.ts`: motor puro nuevo, `calculateRecipeCost()`
+  — cantidad × costo unitario de cada insumo, redondeo solo al final (no
+  por línea, para no arrastrar error en insumos de cantidad chica como sal
+  fina). Con tests que reproducen el ejemplo real de Lomo Grande.
+- `lib/repositories/recipes.repo.ts`: `saveProductRecipe()` reemplaza la
+  receta completa de un producto de una sola vez (no incremental) y
+  persiste el costo calculado en `products.current_cost` — así
+  `profitability-engine.ts` sigue leyendo exactamente lo mismo que ya leía,
+  sin enterarse de que ahora el número viene de una receta.
+- UI en `/sales`: cada producto tiene un botón "Receta" que abre una
+  plantilla con **todos** los insumos del catálogo y un campo de cantidad
+  por insumo — se completan los que aplican, se deja el resto vacío, un
+  solo "Guardar receta" manda todo junto.
+
 ## Qué falta después de Fase 1
 
 Ver el roadmap en los documentos de arquitectura entregados. Fase 2 es el
