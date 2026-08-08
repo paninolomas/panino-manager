@@ -1,7 +1,7 @@
 import { listSuppliers, listObligations } from "../../../lib/repositories/suppliers.repo";
 import { requireSession } from "../../../lib/auth/session";
 import { listAccounts } from "../../../lib/repositories/accounts.repo";
-import { NewSupplierForm, NewObligationForm, SuppliersList, ObligationRow } from "../../../components/domain/SupplierForms";
+import { NewSupplierForm, NewObligationForm, SuppliersList, ObligationRow, PaidObligationRow } from "../../../components/domain/SupplierForms";
 
 function formatARS(n: number) {
   return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
@@ -39,6 +39,21 @@ export default async function SuppliersPage() {
                 </div>
               ))}
       </section>
+
+      {profile.role === "socio" && (
+        <section className="card stack">
+          <div className="label">Pagos a proveedores (historial)</div>
+          {obligations.filter((o) => o.status === "paid").length === 0 && (
+            <p style={{ color: "var(--ink-soft)" }}>Todavía no hay pagos registrados.</p>
+          )}
+          {obligations
+            .filter((o) => o.status === "paid")
+            .slice(0, 20)
+            .map((o) => (
+              <PaidObligationRow key={o.id} obligation={o} supplierName={supplierName(o.supplierId) ?? "—"} />
+            ))}
+        </section>
+      )}
 
       <section className="card stack">
         <div className="label">Proveedores</div>

@@ -5,6 +5,7 @@ import { getActiveReserveTarget } from "../../../lib/repositories/reserve.repo";
 import { requireSocio } from "../../../lib/auth/session";
 import {
   GenerateSettlementForm,
+  ManualSettlementForm,
   CollectSettlementButton,
   PayCommissionButton,
   AdvanceSimulatorForm,
@@ -38,6 +39,7 @@ export default async function SettlementsPage() {
             <div className="row">
               <span>
                 {channelName(s.channel_id)} · {s.period_start} → {s.period_end}
+                {s.is_manual && <span className="pill" style={{ marginLeft: 6 }}>manual</span>}
               </span>
               <span className="figure">{formatARS(Number(s.net_amount))}</span>
             </div>
@@ -50,6 +52,16 @@ export default async function SettlementsPage() {
             </div>
           </div>
         ))}
+      </section>
+
+      <section className="card stack">
+        <h2 style={{ fontSize: 16 }}>Cargar liquidación manual</h2>
+        <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>
+          Para cuando ya tenés el monto a cobrar calculado afuera (planilla propia, liquidación
+          del canal) y no vas a cargar venta por venta. Entra al calendario financiero igual que
+          una liquidación generada automáticamente.
+        </p>
+        <ManualSettlementForm channels={channels} />
       </section>
 
       <section className="card stack">

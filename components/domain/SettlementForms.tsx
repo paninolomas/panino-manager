@@ -2,12 +2,81 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiAction } from "../../lib/client/api-action";
 
 type Channel = { id: string; name: string; settlement_model: string };
 type Account = { id: string; name: string };
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Carga manual: para cuando el monto a cobrar ya se calculó afuera de la
+ * app (planilla propia, liquidación del canal, etc.) y el módulo de ventas
+ * no se usa venta por venta -- generate_settlement() no tiene de dónde
+ * agrupar. Inserta directo con create_manual_settlement (0033); una vez
+ * cargada, aparece en "Pendientes de cobro" igual que una automática y
+ * entra al calendario financiero del dashboard sin que haya que tocar nada
+ * más (el motor lee cualquier settlement con status='pending', no le
+ * importa el origen).
+ */
+export function ManualSettlementForm({ channels }: { channels: Channel[] }) {
+  const router = useRouter();
+  const [channelId, setChannelId] = useState(channels[0]?.id ?? "");
+  const [netAmount, setNetAmount] = useState("");
+  const [expectedPaymentDate, setExpectedPaymentDate] = useState(todayISO());
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const result = await apiAction("/api/settlements/manual", "POST", {
+      channelId,
+      netAmount: Number(netAmount),
+      expectedPaymentDate,
+      notes: notes || undefined,
+    });
+    setLoading(false);
+    if (!result.ok) return setError(result.error ?? null);
+    setNetAmount("");
+    setNotes("");
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={submit} className="stack">
+      {error && <div className="error-banner">{error}</div>}
+      <label>
+        Canal
+        <select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+          {channels.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Monto a cobrar
+        <input required type="number" min="0.01" step="0.01" value={netAmount} onChange={(e) => setNetAmount(e.target.value)} placeholder="Ej: 450000" />
+      </label>
+      <label>
+        Fecha esperada de cobro
+        <input required type="date" value={expectedPaymentDate} onChange={(e) => setExpectedPaymentDate(e.target.value)} />
+      </label>
+      <label>
+        Notas (opcional)
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ej: según planilla propia de agosto" />
+      </label>
+      <button className="btn" type="submit" disabled={loading}>
+        {loading ? "Cargando…" : "Cargar liquidación manual"}
+      </button>
+    </form>
+  );
 }
 
 export function GenerateSettlementForm({ channels }: { channels: Channel[] }) {

@@ -1,11 +1,7 @@
 import { listExpenseCategories, listExpenses } from "../../../lib/repositories/expenses.repo";
 import { listAccounts } from "../../../lib/repositories/accounts.repo";
-import { NewExpenseForm, ExpenseRow, ExpenseCategoriesManager } from "../../../components/domain/ExpenseForms";
+import { NewExpenseForm, ExpenseRow, ExpenseCategoriesManager, PaidExpenseRow } from "../../../components/domain/ExpenseForms";
 import { requireSocio } from "../../../lib/auth/session";
-
-function formatARS(n: number) {
-  return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
-}
 
 export default async function ExpensesPage() {
   await requireSocio();
@@ -44,12 +40,11 @@ export default async function ExpensesPage() {
           .filter((e) => e.status === "paid")
           .slice(0, 20)
           .map((e) => (
-            <div key={e.id} className="row">
-              <span>{e.description}</span>
-              <span className="figure" style={{ color: "var(--ink-soft)" }}>
-                {formatARS(Number(e.amount))}
-              </span>
-            </div>
+            <PaidExpenseRow
+              key={e.id}
+              expense={{ id: e.id, description: e.description, amount: Number(e.amount), date: e.date, category_id: e.category_id }}
+              categoryName={categoryName(e.category_id)}
+            />
           ))}
       </section>
 

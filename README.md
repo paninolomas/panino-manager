@@ -429,6 +429,29 @@ categorías:
   Ninguna entidad con FKs en contra tiene borrado real — todas usan la
   columna `active` para soft-delete, mismo patrón que ya usaba `products`.
 
+## Fase 10 — Liquidación manual + revertir pagos ya hechos (ver migración 0033)
+
+Dos pedidos reales de uso, no bugs:
+
+- **"la liquidación la quiero hacer manual"**: `generate_settlement()` (Fase
+  2) exige ventas cargadas vía `record_sale()` para agrupar — pero el dueño
+  del negocio decidió no cargar venta por venta (no le suma tiempo), así
+  que ese flujo nunca tenía de dónde sacar datos. `create_manual_settlement()`
+  inserta la liquidación directo con el monto ya calculado afuera de la app.
+  Alimenta el mismo `listExpectedInflows()` que ya usa `financial-engine.ts`,
+  así que entra al calendario financiero exactamente igual que una
+  liquidación automática — el motor no distingue el origen. Se marca con
+  `is_manual = true` para que quede claro en la UI de dónde salió el número.
+
+- **"en gastos no me deja eliminar o editar"**: un gasto/obligación YA
+  PAGADO es inmutable a propósito (trigger, desde 0005) — Fase 9 solo
+  resolvió la edición mientras está *pendiente*. No existía ninguna forma
+  de deshacer un pago ya cargado, ni siquiera vía reversión. Se agregan
+  `reverse_expense_payment()` y `reverse_obligation_payment()`, mismo
+  patrón que `reverse_movement()` (0014): revierten el movimiento de caja
+  (nunca lo borran) y devuelven el registro a `pending`, donde el PATCH de
+  Fase 9 ya lo puede editar o volver a pagar bien.
+
 ## Qué falta después de Fase 1
 
 Ver el roadmap en los documentos de arquitectura entregados. Fase 2 es el

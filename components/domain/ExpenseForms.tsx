@@ -83,6 +83,43 @@ export function ExpenseRow({
   );
 }
 
+/** Fila de gasto YA PAGADO con botón "Revertir" -- antes no había ninguna forma de deshacer un pago cargado mal. reverse_expense_payment (0033) revierte el movimiento de caja y devuelve el gasto a pendiente, donde ExpenseRow ya lo puede editar. Recibe el monto crudo, no una función de formateo -- pasar funciones de Server a Client Component rompe con "Minified React error #441". */
+export function PaidExpenseRow({ expense, categoryName }: { expense: Expense; categoryName: string }) {
+  const router = useRouter();
+  const [reversing, setReversing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function formatARS(n: number) {
+    return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
+  }
+
+  async function reverse() {
+    if (!confirm("¿Revertir este pago? El gasto vuelve a quedar pendiente y se puede editar de nuevo. No se borra nada, se crea un movimiento inverso.")) return;
+    setReversing(true);
+    const result = await apiAction(`/api/expenses/${expense.id}/reverse`, "POST", {});
+    setReversing(false);
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  return (
+    <div className="row" style={{ alignItems: "center" }}>
+      {error && <div className="error-banner">{error}</div>}
+      <span>
+        {expense.description} · <span style={{ color: "var(--ink-soft)" }}>{categoryName}</span>
+      </span>
+      <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <span className="figure" style={{ color: "var(--ink-soft)" }}>
+          {formatARS(expense.amount)}
+        </span>
+        <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" disabled={reversing} onClick={reverse}>
+          {reversing ? "…" : "Revertir pago"}
+        </button>
+      </span>
+    </div>
+  );
+}
+
 /** Alta + edición + desactivar de categorías de gasto. Sin borrado real -- expenses referencia category_id por FK. */
 export function ExpenseCategoriesManager({ categories }: { categories: Category[] }) {
   const router = useRouter();

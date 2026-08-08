@@ -79,7 +79,42 @@ export function SuppliersList({ suppliers }: { suppliers: Supplier[] }) {
   );
 }
 
-/** Fila de obligación pendiente con editar (monto/vencimiento) + el botón de pagar que ya existía. Solo aplica a pendientes -- una vez pagada, el trigger guard_obligation_immutability (0005) rechaza el cambio y el form ni se muestra. */
+/** Fila de obligación YA PAGADA con botón "Revertir". Recibe el monto crudo, formatea internamente -- pasar una función de formateo desde el Server Component rompe con "Minified React error #441" (ver StockForms/MovementForms). */
+export function PaidObligationRow({ obligation, supplierName }: { obligation: Obligation; supplierName: string }) {
+  const router = useRouter();
+  const [reversing, setReversing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function formatARS(n: number) {
+    return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
+  }
+
+  async function reverse() {
+    if (!confirm("¿Revertir este pago? La obligación vuelve a quedar pendiente y se puede editar de nuevo. No se borra nada, se crea un movimiento inverso.")) return;
+    setReversing(true);
+    const result = await apiAction(`/api/suppliers/obligations/${obligation.id}/reverse`, "POST", {});
+    setReversing(false);
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  return (
+    <div className="row" style={{ alignItems: "center" }}>
+      {error && <div className="error-banner">{error}</div>}
+      <span>{supplierName}</span>
+      <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <span className="figure" style={{ color: "var(--ink-soft)" }}>
+          {formatARS(obligation.amount)}
+        </span>
+        <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" disabled={reversing} onClick={reverse}>
+          {reversing ? "…" : "Revertir pago"}
+        </button>
+      </span>
+    </div>
+  );
+}
+
+/** Fila de obligación pendiente con editar (monto/vencimiento) + el botón de pagar que ya existía. Solo aplica a pendientes -- una vez pagada, el trigger guard_obligation_immutability (0005) rechaza el cambio y el form ni se muestra (ver PaidObligationRow arriba para esas). */
 export function ObligationRow({
   obligation,
   supplierName,

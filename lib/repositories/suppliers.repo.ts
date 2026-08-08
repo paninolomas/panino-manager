@@ -105,6 +105,17 @@ export async function listObligations(): Promise<Obligation[]> {
   }));
 }
 
+/** Deshace el pago de una obligación: revierte el movimiento de caja (nunca lo borra) y la devuelve a 'pending', donde updateObligation ya puede editarla. */
+export async function reverseObligationPayment(obligationId: string, description?: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("reverse_obligation_payment", {
+    p_obligation_id: obligationId,
+    p_description: description ?? "Reversión de pago a proveedor",
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 export async function payObligation(input: {
   obligationId: string;
   accountId: string;

@@ -5,7 +5,7 @@ export async function listPendingSettlements() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("settlements")
-    .select("id, channel_id, period_start, period_end, gross_amount, commission_amount, net_amount, expected_payment_date, status")
+    .select("id, channel_id, period_start, period_end, gross_amount, commission_amount, net_amount, expected_payment_date, status, is_manual, notes")
     .eq("status", "pending")
     .order("expected_payment_date");
   if (error) throw error;
@@ -36,6 +36,27 @@ export async function listExpectedInflows(): Promise<ExpectedInflow[]> {
     amount: Number(s.net_amount),
     expectedDate: s.expected_payment_date,
   }));
+}
+
+export async function createManualSettlement(input: {
+  channelId: string;
+  netAmount: number;
+  expectedPaymentDate: string;
+  periodStart?: string;
+  periodEnd?: string;
+  notes?: string;
+}) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("create_manual_settlement", {
+    p_channel_id: input.channelId,
+    p_net_amount: input.netAmount,
+    p_expected_payment_date: input.expectedPaymentDate,
+    p_period_start: input.periodStart ?? null,
+    p_period_end: input.periodEnd ?? null,
+    p_notes: input.notes ?? null,
+  });
+  if (error) throw error;
+  return data as string;
 }
 
 export async function generateSettlement(input: { channelId: string; periodStart: string; periodEnd: string }) {

@@ -92,6 +92,17 @@ export async function updateExpense(
   return data;
 }
 
+/** Deshace el pago de un gasto: revierte el movimiento de caja (nunca lo borra) y devuelve el gasto a 'pending', donde updateExpense ya puede editarlo. */
+export async function reverseExpensePayment(expenseId: string, description?: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("reverse_expense_payment", {
+    p_expense_id: expenseId,
+    p_description: description ?? "Reversión de pago de gasto",
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 export async function payExpense(input: {
   expenseId: string;
   accountId: string;
