@@ -1,5 +1,5 @@
 import { listAccounts } from "../../../lib/repositories/accounts.repo";
-import { NewAccountForm, OpeningBalanceForm } from "../../../components/domain/AccountForms";
+import { NewAccountForm, OpeningBalanceForm, AccountsList } from "../../../components/domain/AccountForms";
 
 export default async function AccountsPage() {
   const accounts = await listAccounts();
@@ -10,13 +10,7 @@ export default async function AccountsPage() {
 
       <section className="card stack">
         <div className="label">Cuentas activas</div>
-        {accounts.length === 0 && <p style={{ color: "var(--ink-soft)" }}>Todavía no hay cuentas cargadas.</p>}
-        {accounts.map((a) => (
-          <div key={a.id} className="row">
-            <span>{a.name}</span>
-            <span className="pill">{a.type}</span>
-          </div>
-        ))}
+        <AccountsList accounts={accounts} />
       </section>
 
       <section className="card stack">

@@ -1,6 +1,6 @@
 import { listExpenseCategories, listExpenses } from "../../../lib/repositories/expenses.repo";
 import { listAccounts } from "../../../lib/repositories/accounts.repo";
-import { NewExpenseForm, PayExpenseButton } from "../../../components/domain/ExpenseForms";
+import { NewExpenseForm, ExpenseRow, ExpenseCategoriesManager } from "../../../components/domain/ExpenseForms";
 import { requireSocio } from "../../../lib/auth/session";
 
 function formatARS(n: number) {
@@ -28,15 +28,13 @@ export default async function ExpensesPage() {
         {expenses
           .filter((e) => e.status === "pending")
           .map((e) => (
-            <div key={e.id} className="row" style={{ alignItems: "center" }}>
-              <span>
-                {e.description} · <span style={{ color: "var(--ink-soft)" }}>{categoryName(e.category_id)}</span>
-              </span>
-              <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span className="figure">{formatARS(Number(e.amount))}</span>
-                <PayExpenseButton expenseId={e.id} accounts={accounts} />
-              </span>
-            </div>
+            <ExpenseRow
+              key={e.id}
+              expense={{ id: e.id, description: e.description, amount: Number(e.amount), date: e.date, category_id: e.category_id }}
+              categoryName={categoryName(e.category_id)}
+              categories={categories}
+              accounts={accounts}
+            />
           ))}
       </section>
 
@@ -58,6 +56,11 @@ export default async function ExpensesPage() {
       <section className="card stack">
         <h2 style={{ fontSize: 16 }}>Nuevo gasto</h2>
         <NewExpenseForm categories={categories} />
+      </section>
+
+      <section className="card stack">
+        <h2 style={{ fontSize: 16 }}>Categorías de gasto</h2>
+        <ExpenseCategoriesManager categories={categories} />
       </section>
     </div>
   );

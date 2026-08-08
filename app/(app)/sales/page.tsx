@@ -1,6 +1,6 @@
 import { listChannels, listProducts, listSalesProducts } from "../../../lib/repositories/sales.repo";
 import { requireSession } from "../../../lib/auth/session";
-import { NewSaleForm, NewProductForm } from "../../../components/domain/SalesForms";
+import { NewSaleForm, NewProductForm, ProductsList } from "../../../components/domain/SalesForms";
 
 export default async function SalesPage() {
   const profile = await requireSession();
@@ -27,14 +27,7 @@ export default async function SalesPage() {
       {profile.role === "socio" && (
         <section className="card stack">
           <h2 style={{ fontSize: 16 }}>Productos</h2>
-          {(products as { id: string; name: string; current_cost: number }[]).map((p) => (
-            <div key={p.id} className="row">
-              <span>{p.name}</span>
-              <span className="figure" style={{ color: "var(--ink-soft)" }}>
-                costo ${p.current_cost}
-              </span>
-            </div>
-          ))}
+          <ProductsList products={products as { id: string; name: string; current_cost: number }[]} channels={channels} />
           <hr className="ticket-rule" />
           <NewProductForm />
         </section>

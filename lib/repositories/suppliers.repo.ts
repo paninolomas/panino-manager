@@ -5,8 +5,44 @@ export async function listSuppliers() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("suppliers")
-    .select("id, name, default_payment_terms_days, notes")
+    .select("id, name, default_payment_terms_days, notes, active")
+    .eq("active", true)
     .order("name");
+  if (error) throw error;
+  return data;
+}
+
+export async function updateSupplier(
+  supplierId: string,
+  input: { name?: string; defaultPaymentTermsDays?: number; notes?: string; active?: boolean }
+) {
+  const supabase = await createSupabaseServerClient();
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) patch.name = input.name;
+  if (input.defaultPaymentTermsDays !== undefined) patch.default_payment_terms_days = input.defaultPaymentTermsDays;
+  if (input.notes !== undefined) patch.notes = input.notes;
+  if (input.active !== undefined) patch.active = input.active;
+  const { data, error } = await supabase.from("suppliers").update(patch).eq("id", supplierId).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Editar una obligación PENDIENTE (monto/fecha/vencimiento). Una vez pagada,
+ * el trigger guard_obligation_immutability (0005) rechaza el UPDATE -- este
+ * repo no duplica esa validación, deja que Postgres la haga (misma fuente
+ * de verdad, un solo lugar donde puede romperse).
+ */
+export async function updateObligation(
+  obligationId: string,
+  input: { amount?: number; purchaseDate?: string; estimatedDueDate?: string }
+) {
+  const supabase = await createSupabaseServerClient();
+  const patch: Record<string, unknown> = {};
+  if (input.amount !== undefined) patch.amount = input.amount;
+  if (input.purchaseDate !== undefined) patch.purchase_date = input.purchaseDate;
+  if (input.estimatedDueDate !== undefined) patch.estimated_due_date = input.estimatedDueDate;
+  const { data, error } = await supabase.from("obligations").update(patch).eq("id", obligationId).select().single();
   if (error) throw error;
   return data;
 }

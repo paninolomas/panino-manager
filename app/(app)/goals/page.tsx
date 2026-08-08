@@ -1,7 +1,7 @@
 import { listGoals, getGoalAchievedValue, getDailyRevenueSeries } from "../../../lib/repositories/goals.repo";
 import { requireSocio } from "../../../lib/auth/session";
 import { calculateGoalProgress, projectGoalCompletion } from "../../../lib/services/goals-engine";
-import { NewGoalForm } from "../../../components/domain/GoalForms";
+import { NewGoalForm, GoalActions } from "../../../components/domain/GoalForms";
 
 function formatValue(variable: string, n: number) {
   if (variable === "margen") return `${(n * 100).toFixed(1)}%`;
@@ -79,6 +79,8 @@ export default async function GoalsPage() {
               {goal.periodStart} → {goal.periodEnd}
             </span>
           </div>
+
+          <GoalActions goalId={goal.id} targetValue={goal.targetValue} periodStart={goal.periodStart} periodEnd={goal.periodEnd} />
 
           <div className="row">
             <span className="value-lg">{formatValue(goal.variable, progress.achievedValue)}</span>

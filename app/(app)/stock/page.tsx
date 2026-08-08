@@ -7,7 +7,7 @@ import {
   buildPurchaseRecommendations,
   sortByPurchasePriority,
 } from "../../../lib/services/stock-engine";
-import { NewStockItemForm, StockMovementForm } from "../../../components/domain/StockForms";
+import { NewStockItemForm, StockMovementForm, StockItemEditToggle, StockMovementsList } from "../../../components/domain/StockForms";
 
 const CONFIDENCE_LABEL: Record<string, string> = {
   real: "🟢 Real",
@@ -80,6 +80,7 @@ export default async function StockPage() {
                   {coverage.days === null ? "—" : `${coverage.days.toFixed(1)} días`}
                 </span>
                 <span className="pill">{CONFIDENCE_LABEL[coverage.confidence]}</span>
+                {profile.role === "socio" && <StockItemEditToggle item={i} />}
               </span>
             </div>
           );
@@ -104,6 +105,11 @@ export default async function StockPage() {
               </span>
             </div>
           ))}
+      </section>
+
+      <section className="card stack">
+        <div className="label">Últimos movimientos</div>
+        <StockMovementsList movements={movements} itemName={itemName} itemUnit={itemUnit} />
       </section>
 
       <section className="card stack">

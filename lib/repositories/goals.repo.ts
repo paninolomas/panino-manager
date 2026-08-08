@@ -49,6 +49,27 @@ export async function createGoal(input: {
   return data;
 }
 
+export async function updateGoal(
+  goalId: string,
+  input: { targetValue?: number; periodStart?: string; periodEnd?: string }
+) {
+  const supabase = await createSupabaseServerClient();
+  const patch: Record<string, unknown> = {};
+  if (input.targetValue !== undefined) patch.target_value = input.targetValue;
+  if (input.periodStart !== undefined) patch.period_start = input.periodStart;
+  if (input.periodEnd !== undefined) patch.period_end = input.periodEnd;
+  const { data, error } = await supabase.from("goals").update(patch).eq("id", goalId).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/** A diferencia del resto de los módulos, un objetivo no tiene ninguna tabla que lo referencie -- se permite borrar de verdad, no solo desactivar (ver policy "goals delete" en 0032). */
+export async function deleteGoal(goalId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("goals").delete().eq("id", goalId);
+  if (error) throw error;
+}
+
 /** Serie diaria de facturación (única variable con granularidad diaria confiable en Fase 5, vía orders). */
 export async function getDailyRevenueSeries(from: string, to: string): Promise<DailySeriesPoint[]> {
   const supabase = await createSupabaseServerClient();

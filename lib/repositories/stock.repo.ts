@@ -12,6 +12,22 @@ export async function listStockItems() {
   return data;
 }
 
+export async function updateStockItem(
+  stockItemId: string,
+  input: { name?: string; unit?: string; minStock?: number; safetyStock?: number; active?: boolean }
+) {
+  const supabase = await createSupabaseServerClient();
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) patch.name = input.name;
+  if (input.unit !== undefined) patch.unit = input.unit;
+  if (input.minStock !== undefined) patch.min_stock = input.minStock;
+  if (input.safetyStock !== undefined) patch.safety_stock = input.safetyStock;
+  if (input.active !== undefined) patch.active = input.active;
+  const { data, error } = await supabase.from("stock_items").update(patch).eq("id", stockItemId).select().single();
+  if (error) throw error;
+  return data;
+}
+
 export async function createStockItem(input: {
   locationId: string;
   name: string;

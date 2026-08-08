@@ -22,6 +22,16 @@ export async function createAccount(input: { name: string; type: string; locatio
   return data;
 }
 
+export async function updateAccount(accountId: string, input: { name?: string; active?: boolean }) {
+  const supabase = await createSupabaseServerClient();
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) patch.name = input.name;
+  if (input.active !== undefined) patch.active = input.active;
+  const { data, error } = await supabase.from("cash_accounts").update(patch).eq("id", accountId).select().single();
+  if (error) throw error;
+  return data;
+}
+
 export async function createOpeningBalance(input: {
   accountId: string;
   amount: number;

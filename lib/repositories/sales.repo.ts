@@ -56,6 +56,21 @@ export async function createProduct(input: {
   return data;
 }
 
+/** Editar nombre/categoría/estado de un producto (el costo tiene su propia función, updateProductCost, más abajo, porque queda cubierta por auditoría con su propio comentario). */
+export async function updateProduct(
+  productId: string,
+  input: { name?: string; category?: string; active?: boolean }
+) {
+  const supabase = await createSupabaseServerClient();
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) patch.name = input.name;
+  if (input.category !== undefined) patch.category = input.category;
+  if (input.active !== undefined) patch.active = input.active;
+  const { data, error } = await supabase.from("products").update(patch).eq("id", productId).select().single();
+  if (error) throw error;
+  return data;
+}
+
 /**
  * Actualiza el costo actual de un producto. Queda versionado automáticamente
  * en audit_log (trigger trg_audit_products, 0009) -- nunca se pierde el valor

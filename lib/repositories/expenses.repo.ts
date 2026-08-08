@@ -4,8 +4,34 @@ export async function listExpenseCategories() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("expense_categories")
-    .select("id, name, type")
+    .select("id, name, type, active")
+    .eq("active", true)
     .order("name");
+  if (error) throw error;
+  return data;
+}
+
+export async function createExpenseCategory(input: { name: string; type: "variable" | "fijo" | "personal"; parentId?: string }) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("expense_categories")
+    .insert({ name: input.name, type: input.type, parent_id: input.parentId ?? null })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateExpenseCategory(
+  categoryId: string,
+  input: { name?: string; type?: "variable" | "fijo" | "personal"; active?: boolean }
+) {
+  const supabase = await createSupabaseServerClient();
+  const patch: Record<string, unknown> = {};
+  if (input.name !== undefined) patch.name = input.name;
+  if (input.type !== undefined) patch.type = input.type;
+  if (input.active !== undefined) patch.active = input.active;
+  const { data, error } = await supabase.from("expense_categories").update(patch).eq("id", categoryId).select().single();
   if (error) throw error;
   return data;
 }
@@ -41,6 +67,27 @@ export async function createExpense(input: {
     })
     .select()
     .single();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Editar un gasto PENDIENTE (monto/fecha/descripción/categoría). Una vez
+ * pagado, el trigger guard_expense_immutability (0005) rechaza cambios de
+ * monto/fecha -- misma lógica que updateObligation, la validación real vive
+ * en la base, no acá.
+ */
+export async function updateExpense(
+  expenseId: string,
+  input: { description?: string; amount?: number; date?: string; categoryId?: string }
+) {
+  const supabase = await createSupabaseServerClient();
+  const patch: Record<string, unknown> = {};
+  if (input.description !== undefined) patch.description = input.description;
+  if (input.amount !== undefined) patch.amount = input.amount;
+  if (input.date !== undefined) patch.date = input.date;
+  if (input.categoryId !== undefined) patch.category_id = input.categoryId;
+  const { data, error } = await supabase.from("expenses").update(patch).eq("id", expenseId).select().single();
   if (error) throw error;
   return data;
 }
