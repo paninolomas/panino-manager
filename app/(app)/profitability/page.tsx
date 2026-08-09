@@ -1,6 +1,6 @@
 import { listProducts, listChannels } from "../../../lib/repositories/sales.repo";
 import { listStockItems } from "../../../lib/repositories/stock.repo";
-import { listLatestMarginSnapshots, getProductProfitabilityInputs, getActiveRoyaltyRate, getCommissionByChannel } from "../../../lib/repositories/profitability.repo";
+import { listLatestMarginSnapshots, getProductProfitabilityInputs, getActiveRoyaltyRate, getCommissionByChannel, getOnlinePaymentFeeByChannel } from "../../../lib/repositories/profitability.repo";
 import { requireSocio } from "../../../lib/auth/session";
 import {
   rankByMarginPercent,
@@ -16,6 +16,7 @@ import {
   ProductProfitabilityTable,
   RoyaltyRateForm,
   ChannelCommissionForm,
+  ChannelOnlinePaymentFeeForm,
 } from "../../../components/domain/ProfitabilityForms";
 
 function formatARS(n: number) {
@@ -29,7 +30,7 @@ const MARGIN_DROP_THRESHOLD = 0.02; // 2 puntos porcentuales, mismo umbral que l
 
 export default async function ProfitabilityPage() {
   await requireSocio();
-  const [products, channels, rawSnapshots, stockItems, profitabilityRows, royaltyPercent, commissionByChannel] = await Promise.all([
+  const [products, channels, rawSnapshots, stockItems, profitabilityRows, royaltyPercent, commissionByChannel, onlinePaymentFeeByChannel] = await Promise.all([
     listProducts(),
     listChannels(),
     listLatestMarginSnapshots(),
@@ -37,6 +38,7 @@ export default async function ProfitabilityPage() {
     getProductProfitabilityInputs(),
     getActiveRoyaltyRate(),
     getCommissionByChannel(),
+    getOnlinePaymentFeeByChannel(),
   ]);
 
   const productName = (id: string) => products.find((p) => p.id === id)?.name ?? "—";
@@ -87,7 +89,10 @@ export default async function ProfitabilityPage() {
         {channels
           .filter((c) => c.name === "pedidosya" || c.name === "rappi" || c.name === "pedix")
           .map((c) => (
-            <ChannelCommissionForm key={c.id} channel={{ ...c, commissionPercent: commissionByChannel[c.id] ?? 0 }} />
+            <div key={c.id} className="stack" style={{ gap: 4 }}>
+              <ChannelCommissionForm channel={{ ...c, commissionPercent: commissionByChannel[c.id] ?? 0 }} />
+              <ChannelOnlinePaymentFeeForm channel={{ ...c, onlinePaymentFeePercent: onlinePaymentFeeByChannel[c.id] ?? 0 }} />
+            </div>
           ))}
       </section>
 

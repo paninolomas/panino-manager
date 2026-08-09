@@ -114,7 +114,44 @@ export function ChannelCommissionForm({ channel }: { channel: Channel & { commis
   return (
     <form onSubmit={handleSubmit} className="row" style={{ gap: 8, alignItems: "center" }}>
       {error && <span style={{ color: "var(--risk)", fontSize: 12 }}>{error}</span>}
-      <span style={{ flex: 1 }}>{channel.name}</span>
+      <span style={{ flex: 1 }}>{channel.name} · comisión</span>
+      <input type="number" required min="0" max="100" step="0.01" value={percent} onChange={(e) => setPercent(e.target.value)} style={{ width: 80 }} />
+      <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>%</span>
+      <button className="btn btn-secondary" type="submit" disabled={loading} style={{ padding: "4px 10px", fontSize: 13 }}>
+        {loading ? "…" : "Guardar"}
+      </button>
+    </form>
+  );
+}
+
+/** Editar "Servicio pago en línea" vigente de un canal (Fase 16) -- mismo patrón que ChannelCommissionForm, cargo distinto de la comisión. */
+export function ChannelOnlinePaymentFeeForm({ channel }: { channel: Channel & { onlinePaymentFeePercent: number } }) {
+  const router = useRouter();
+  const [percent, setPercent] = useState(String(channel.onlinePaymentFeePercent * 100));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const res = await fetch("/api/channel-online-payment-fee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: channel.id, percent: Number(percent) / 100 }),
+    });
+    setLoading(false);
+    if (!res.ok) {
+      setError("No se pudo actualizar el cargo.");
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="row" style={{ gap: 8, alignItems: "center" }}>
+      {error && <span style={{ color: "var(--risk)", fontSize: 12 }}>{error}</span>}
+      <span style={{ flex: 1 }}>{channel.name} · servicio pago en línea</span>
       <input type="number" required min="0" max="100" step="0.01" value={percent} onChange={(e) => setPercent(e.target.value)} style={{ width: 80 }} />
       <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>%</span>
       <button className="btn btn-secondary" type="submit" disabled={loading} style={{ padding: "4px 10px", fontSize: 13 }}>
@@ -135,7 +172,7 @@ export function ProductProfitabilityTable({
   rows,
   royaltyPercent,
 }: {
-  rows: { productId: string; productName: string; channelId: string; channelName: string; price: number; cost: number; commissionPercent: number }[];
+  rows: { productId: string; productName: string; channelId: string; channelName: string; price: number; cost: number; commissionPercent: number; onlinePaymentFeePercent: number }[];
   royaltyPercent: number;
 }) {
   function formatARS(n: number) {
@@ -157,6 +194,7 @@ export function ProductProfitabilityTable({
             <th style={{ padding: "4px 8px", textAlign: "right" }}>Costo</th>
             <th style={{ padding: "4px 8px", textAlign: "right" }}>Comisión</th>
             <th style={{ padding: "4px 8px", textAlign: "right" }}>Regalía</th>
+            <th style={{ padding: "4px 8px", textAlign: "right" }}>Pago en línea</th>
             <th style={{ padding: "4px 8px", textAlign: "right" }}>Total obtenido</th>
             <th style={{ padding: "4px 8px", textAlign: "right" }}>Rentabilidad</th>
             <th style={{ padding: "4px 8px", textAlign: "right" }}>Margen</th>
@@ -166,7 +204,8 @@ export function ProductProfitabilityTable({
           {rows.map((r) => {
             const commissionAmount = r.price * r.commissionPercent;
             const royaltyAmount = r.price * royaltyPercent;
-            const netObtained = r.price - commissionAmount - royaltyAmount;
+            const onlinePaymentFeeAmount = r.price * r.onlinePaymentFeePercent;
+            const netObtained = r.price - commissionAmount - royaltyAmount - onlinePaymentFeeAmount;
             const profitability = r.cost > 0 ? netObtained / r.cost : null;
             const margin = netObtained > 0 ? (netObtained - r.cost) / netObtained : null;
             return (
@@ -179,6 +218,7 @@ export function ProductProfitabilityTable({
                 </td>
                 <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(commissionAmount)}</td>
                 <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(royaltyAmount)}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(onlinePaymentFeeAmount)}</td>
                 <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(netObtained)}</td>
                 <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>
                   {profitability === null ? "—" : `${(profitability * 100).toFixed(1)}%`}
