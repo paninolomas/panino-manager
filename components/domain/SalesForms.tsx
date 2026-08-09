@@ -18,7 +18,18 @@ type RecipeLine = { stockItemId: string; stockItemName: string; unit: string; qu
  * incremental) y el costo se recalcula y persiste en current_cost del lado
  * del servidor (recipe-engine.ts), esta UI solo arma el request.
  */
-export function RecipeEditor({ productId, stockItems, initialRecipe }: { productId: string; stockItems: StockItem[]; initialRecipe: RecipeLine[] }) {
+export function RecipeEditor({
+  productId,
+  stockItems,
+  initialRecipe,
+  onSaved,
+}: {
+  productId: string;
+  stockItems: StockItem[];
+  initialRecipe: RecipeLine[];
+  /** Se llama después de un guardado exitoso -- el que lo pasa (ProductCostRow, ProductsList) debe usarlo para RE-PEDIR la receta guardada al servidor, no solo para avisar. Sin esto, la próxima vez que se abre "Receta" (cerrás y volvés a abrir, o cambiás de pantalla y volvés) se sigue mostrando el `initialRecipe` viejo que quedó en el estado del padre desde el primer fetch -- que si la primera vez que abriste la receta estaba vacía, se queda vacía para siempre aunque ya hayas guardado después. */
+  onSaved?: () => void | Promise<void>;
+}) {
   const router = useRouter();
   const initialQuantities: Record<string, string> = {};
   for (const item of stockItems) {
@@ -60,6 +71,7 @@ export function RecipeEditor({ productId, stockItems, initialRecipe }: { product
     }
     const data = await res.json();
     setSavedCost(data.cost);
+    await onSaved?.();
     router.refresh();
   }
 
@@ -156,6 +168,18 @@ export function ProductsList({ products, channels, stockItems }: { products: { i
     router.refresh();
   }
 
+  async function loadRecipe(productId: string) {
+    setRecipeLoading(productId);
+    const res = await fetch(`/api/sales/products/${productId}/recipe`);
+    setRecipeLoading(null);
+    if (res.ok) {
+      const data: RecipeLine[] = await res.json();
+      setRecipesByProduct((prev) => ({ ...prev, [productId]: data }));
+    } else {
+      setError("No se pudo cargar la receta.");
+    }
+  }
+
   async function toggleRecipe(productId: string) {
     if (recipeFormId === productId) {
       setRecipeFormId(null);
@@ -163,15 +187,7 @@ export function ProductsList({ products, channels, stockItems }: { products: { i
     }
     setRecipeFormId(productId);
     if (!recipesByProduct[productId]) {
-      setRecipeLoading(productId);
-      const res = await fetch(`/api/sales/products/${productId}/recipe`);
-      setRecipeLoading(null);
-      if (res.ok) {
-        const data: RecipeLine[] = await res.json();
-        setRecipesByProduct((prev) => ({ ...prev, [productId]: data }));
-      } else {
-        setError("No se pudo cargar la receta.");
-      }
+      await loadRecipe(productId);
     }
   }
 
@@ -224,7 +240,7 @@ export function ProductsList({ products, channels, stockItems }: { products: { i
             (recipeLoading === p.id ? (
               <p style={{ color: "var(--ink-soft)", paddingLeft: 12 }}>Cargando…</p>
             ) : (
-              <RecipeEditor productId={p.id} stockItems={stockItems} initialRecipe={recipesByProduct[p.id] ?? []} />
+              <RecipeEditor productId={p.id} stockItems={stockItems} initialRecipe={recipesByProduct[p.id] ?? []} onSaved={() => loadRecipe(p.id)} />
             ))}
           {priceFormId === p.id && (
             <div className="row" style={{ gap: 8, paddingLeft: 12 }}>

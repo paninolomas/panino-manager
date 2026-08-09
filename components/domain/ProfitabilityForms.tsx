@@ -20,6 +20,13 @@ export function ProductCostRow({ product, currentCost, stockItems }: { product: 
   const [loading, setLoading] = useState(false);
   const [recipe, setRecipe] = useState<RecipeLine[] | null>(null);
 
+  async function loadRecipe() {
+    setLoading(true);
+    const res = await fetch(`/api/sales/products/${product.id}/recipe`);
+    setLoading(false);
+    if (res.ok) setRecipe(await res.json());
+  }
+
   async function toggle() {
     if (open) {
       setOpen(false);
@@ -27,10 +34,7 @@ export function ProductCostRow({ product, currentCost, stockItems }: { product: 
     }
     setOpen(true);
     if (recipe === null) {
-      setLoading(true);
-      const res = await fetch(`/api/sales/products/${product.id}/recipe`);
-      setLoading(false);
-      if (res.ok) setRecipe(await res.json());
+      await loadRecipe();
     }
   }
 
@@ -45,7 +49,12 @@ export function ProductCostRow({ product, currentCost, stockItems }: { product: 
           </button>
         </span>
       </div>
-      {open && (loading ? <p style={{ color: "var(--ink-soft)", paddingLeft: 12 }}>Cargando…</p> : <RecipeEditor productId={product.id} stockItems={stockItems} initialRecipe={recipe ?? []} />)}
+      {open &&
+        (loading ? (
+          <p style={{ color: "var(--ink-soft)", paddingLeft: 12 }}>Cargando…</p>
+        ) : (
+          <RecipeEditor productId={product.id} stockItems={stockItems} initialRecipe={recipe ?? []} onSaved={loadRecipe} />
+        ))}
     </div>
   );
 }
@@ -320,6 +329,56 @@ function InlineEditableCell({
   );
 }
 
+/**
+ * Desactiva un producto directo desde la tabla de Rentabilidad -- útil acá
+ * porque es donde más se nota un duplicado (mismo producto dos veces con
+ * distinto precio/costo). Mismo patrón que ProductsList en Ventas
+ * (PATCH active:false, no hay borrado real -- channel_prices,
+ * product_recipe_items, order_items referencian el producto por FK). Si el
+ * producto aparece en varios canales, aparece un botón por fila, pero
+ * desactivar cualquiera desactiva el producto entero -- clickear otro
+ * después es inofensivo (ya está desactivado).
+ */
+function DeleteProductButton({ productId, productName }: { productId: string; productName: string }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    if (!confirm(`¿Desactivar "${productName}"? Deja de aparecer en Ventas/Rentabilidad, pero el historial no se toca (no es un borrado real).`)) return;
+    setLoading(true);
+    setError(null);
+    const res = await fetch(`/api/sales/products/${productId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: false }),
+    });
+    setLoading(false);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      setError(body?.error?.toString() ?? "No se pudo desactivar.");
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+      <button
+        className="btn btn-secondary"
+        type="button"
+        disabled={loading}
+        onClick={handleDelete}
+        style={{ padding: "3px 8px", fontSize: 12, color: "var(--risk)" }}
+        title="Desactivar producto (por si está duplicado)"
+      >
+        {loading ? "…" : "Eliminar"}
+      </button>
+      {error && <span style={{ fontSize: 10, color: "var(--risk)" }}>{error}</span>}
+    </span>
+  );
+}
+
 export function ProductProfitabilityTable({
   rows,
   royaltyPercent,
@@ -489,6 +548,7 @@ export function ProductProfitabilityTable({
             <SortableHeader label="Total obtenido" sortKey="netObtained" />
             <SortableHeader label="Rentabilidad" sortKey="profitability" />
             <SortableHeader label="Margen" sortKey="margin" />
+            <th style={{ padding: "4px 8px" }}></th>
           </tr>
         </thead>
         <tbody>
@@ -523,6 +583,9 @@ export function ProductProfitabilityTable({
               </td>
               <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600, color: marginColor(r.margin, thresholds) }}>
                 {r.margin === null ? "—" : `${(r.margin * 100).toFixed(1)}%`}
+              </td>
+              <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                <DeleteProductButton productId={r.productId} productName={r.productName} />
               </td>
             </tr>
           ))}
