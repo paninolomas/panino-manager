@@ -1,6 +1,43 @@
 import { createSupabaseServerClient } from "../supabase/server";
 import type { ProductChannelSalesSummary } from "../../types/domain";
 
+/** Filas de entrada para la calculadora de rentabilidad por producto (precio + costo + comisión, ya cruzados en product_profitability_inputs, 0036). */
+export async function getProductProfitabilityInputs() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("product_profitability_inputs");
+  if (error) throw error;
+  return (data ?? []).map((r: { product_id: string; product_name: string; channel_id: string; channel_name: string; price: number; cost: number; commission_percent: number }) => ({
+    productId: r.product_id,
+    productName: r.product_name,
+    channelId: r.channel_id,
+    channelName: r.channel_name,
+    price: Number(r.price),
+    cost: Number(r.cost),
+    commissionPercent: Number(r.commission_percent),
+  }));
+}
+
+export async function getActiveRoyaltyRate(): Promise<number> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("royalty_rates").select("percent").is("valid_to", null).maybeSingle();
+  if (error) throw error;
+  return data ? Number(data.percent) : 0;
+}
+
+export async function setRoyaltyRate(percent: number) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("set_royalty_rate", { p_percent: percent });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function setChannelCommission(channelId: string, percent: number) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("set_channel_commission", { p_channel_id: channelId, p_percent: percent });
+  if (error) throw error;
+  return data as string;
+}
+
 export async function setChannelPrice(input: { productId: string; channelId: string; price: number }) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("set_channel_price", {

@@ -18,6 +18,39 @@
 
 import type { ProductChannelSalesSummary, MarginSnapshot, MarginDropAlert } from "../../types/domain";
 
+/**
+ * Calculadora de rentabilidad POR PRODUCTO, independiente de si se vendió o
+ * no -- distinta del margen basado en ventas reales de más abajo. Dado el
+ * precio vigente por canal, el costo actual (de la receta) y las dos
+ * comisiones que aplican (canal + regalía de marca, esta última fija sobre
+ * el precio, igual para las 3 marcas), calcula lo mismo que la planilla del
+ * usuario: comisión $, regalía $, total obtenido, y "rentabilidad" = total
+ * obtenido / costo (no es margen sobre precio -- es cuántas veces el costo
+ * se recupera, expresado en %).
+ */
+export interface ProductProfitabilityInput {
+  price: number;
+  cost: number;
+  commissionPercent: number;
+  royaltyPercent: number;
+}
+
+export interface ProductProfitabilityResult {
+  commissionAmount: number;
+  royaltyAmount: number;
+  netObtained: number;
+  /** null si cost=0 -- dividir por cero daría un número que parece preciso sin serlo (mismo criterio que calculateMarginPercent de abajo). */
+  profitabilityPercent: number | null;
+}
+
+export function calculateProductProfitability(input: ProductProfitabilityInput): ProductProfitabilityResult {
+  const commissionAmount = input.price * input.commissionPercent;
+  const royaltyAmount = input.price * input.royaltyPercent;
+  const netObtained = input.price - commissionAmount - royaltyAmount;
+  const profitabilityPercent = input.cost > 0 ? netObtained / input.cost : null;
+  return { commissionAmount, royaltyAmount, netObtained, profitabilityPercent };
+}
+
 /** Precio neto = precio realmente cobrado menos la comisión del canal. */
 export function calculateNetPrice(unitPrice: number, commissionPercent: number): number {
   return unitPrice * (1 - commissionPercent);

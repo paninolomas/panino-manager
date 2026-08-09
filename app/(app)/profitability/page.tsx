@@ -1,6 +1,6 @@
 import { listProducts, listChannels } from "../../../lib/repositories/sales.repo";
 import { listStockItems } from "../../../lib/repositories/stock.repo";
-import { listLatestMarginSnapshots } from "../../../lib/repositories/profitability.repo";
+import { listLatestMarginSnapshots, getProductProfitabilityInputs, getActiveRoyaltyRate, getCommissionByChannel } from "../../../lib/repositories/profitability.repo";
 import { requireSocio } from "../../../lib/auth/session";
 import {
   rankByMarginPercent,
@@ -13,6 +13,9 @@ import {
   ProductCostRow,
   SetChannelPriceForm,
   GenerateProfitabilityForm,
+  ProductProfitabilityTable,
+  RoyaltyRateForm,
+  ChannelCommissionForm,
 } from "../../../components/domain/ProfitabilityForms";
 
 function formatARS(n: number) {
@@ -26,11 +29,14 @@ const MARGIN_DROP_THRESHOLD = 0.02; // 2 puntos porcentuales, mismo umbral que l
 
 export default async function ProfitabilityPage() {
   await requireSocio();
-  const [products, channels, rawSnapshots, stockItems] = await Promise.all([
+  const [products, channels, rawSnapshots, stockItems, profitabilityRows, royaltyPercent, commissionByChannel] = await Promise.all([
     listProducts(),
     listChannels(),
     listLatestMarginSnapshots(),
     listStockItems(),
+    getProductProfitabilityInputs(),
+    getActiveRoyaltyRate(),
+    getCommissionByChannel(),
   ]);
 
   const productName = (id: string) => products.find((p) => p.id === id)?.name ?? "—";
@@ -67,6 +73,23 @@ export default async function ProfitabilityPage() {
   return (
     <div className="stack">
       <h1>Rentabilidad</h1>
+
+      <section className="card stack">
+        <div className="label">Rentabilidad por producto (calculadora, no depende de ventas)</div>
+        <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>
+          Precio vigente por canal, costo actual (de la receta si la tiene, o el manual) y las
+          comisiones que aplican. Se recalcula solo con lo que ya tenés cargado — no hace falta
+          haber vendido nada para verlo.
+        </p>
+        <ProductProfitabilityTable rows={profitabilityRows} royaltyPercent={royaltyPercent} />
+        <hr className="ticket-rule" />
+        <RoyaltyRateForm current={royaltyPercent} />
+        {channels
+          .filter((c) => c.name === "pedidosya" || c.name === "rappi" || c.name === "pedix")
+          .map((c) => (
+            <ChannelCommissionForm key={c.id} channel={{ ...c, commissionPercent: commissionByChannel[c.id] ?? 0 }} />
+          ))}
+      </section>
 
       {alerts.length > 0 && (
         <section className="card stack">

@@ -49,6 +49,147 @@ export function ProductCostRow({ product, currentCost, stockItems }: { product: 
   );
 }
 
+/** Editar la regalía de marca (una sola tasa global, aplica a Panino/Nino/Goat por igual, confirmado por el usuario). Versionada -- set_royalty_rate (0036) cierra la vigente e inserta una nueva, no pisa el historial. */
+export function RoyaltyRateForm({ current }: { current: number }) {
+  const router = useRouter();
+  const [percent, setPercent] = useState(String(current * 100));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const res = await fetch("/api/royalty", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ percent: Number(percent) / 100 }),
+    });
+    setLoading(false);
+    if (!res.ok) {
+      setError("No se pudo actualizar la regalía.");
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="row" style={{ gap: 8, alignItems: "center" }}>
+      {error && <span style={{ color: "var(--risk)", fontSize: 12 }}>{error}</span>}
+      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        Regalía de marca (%)
+        <input type="number" required min="0" max="100" step="0.01" value={percent} onChange={(e) => setPercent(e.target.value)} style={{ width: 80 }} />
+      </label>
+      <button className="btn btn-secondary" type="submit" disabled={loading} style={{ padding: "4px 10px", fontSize: 13 }}>
+        {loading ? "…" : "Guardar"}
+      </button>
+    </form>
+  );
+}
+
+/** Editar la comisión vigente de un canal -- antes solo se podía cargar por SQL directo (channel_cost_items nunca tuvo setter en la app). */
+export function ChannelCommissionForm({ channel }: { channel: Channel & { commissionPercent: number } }) {
+  const router = useRouter();
+  const [percent, setPercent] = useState(String(channel.commissionPercent * 100));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const res = await fetch("/api/channel-commission", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: channel.id, percent: Number(percent) / 100 }),
+    });
+    setLoading(false);
+    if (!res.ok) {
+      setError("No se pudo actualizar la comisión.");
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="row" style={{ gap: 8, alignItems: "center" }}>
+      {error && <span style={{ color: "var(--risk)", fontSize: 12 }}>{error}</span>}
+      <span style={{ flex: 1 }}>{channel.name}</span>
+      <input type="number" required min="0" max="100" step="0.01" value={percent} onChange={(e) => setPercent(e.target.value)} style={{ width: 80 }} />
+      <span style={{ fontSize: 12, color: "var(--ink-soft)" }}>%</span>
+      <button className="btn btn-secondary" type="submit" disabled={loading} style={{ padding: "4px 10px", fontSize: 13 }}>
+        {loading ? "…" : "Guardar"}
+      </button>
+    </form>
+  );
+}
+
+/**
+ * Tabla "Rentabilidad por producto": calculadora en vivo (precio vigente,
+ * costo actual, comisión del canal, regalía de marca) -- NO depende de
+ * ventas cargadas, a diferencia del resto del módulo. Cálculo en
+ * calculateProductProfitability (profitability-engine.ts), esto solo arma
+ * las filas.
+ */
+export function ProductProfitabilityTable({
+  rows,
+  royaltyPercent,
+}: {
+  rows: { productId: string; productName: string; channelId: string; channelName: string; price: number; cost: number; commissionPercent: number }[];
+  royaltyPercent: number;
+}) {
+  function formatARS(n: number) {
+    return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
+  }
+
+  if (rows.length === 0) {
+    return <p style={{ color: "var(--ink-soft)" }}>No hay precios por canal cargados todavía -- cargalos en Ventas para que aparezcan acá.</p>;
+  }
+
+  return (
+    <div className="stack" style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ textAlign: "left", color: "var(--ink-soft)", fontSize: 12 }}>
+            <th style={{ padding: "4px 8px" }}>Producto</th>
+            <th style={{ padding: "4px 8px" }}>Canal</th>
+            <th style={{ padding: "4px 8px", textAlign: "right" }}>Precio</th>
+            <th style={{ padding: "4px 8px", textAlign: "right" }}>Costo</th>
+            <th style={{ padding: "4px 8px", textAlign: "right" }}>Comisión</th>
+            <th style={{ padding: "4px 8px", textAlign: "right" }}>Regalía</th>
+            <th style={{ padding: "4px 8px", textAlign: "right" }}>Total obtenido</th>
+            <th style={{ padding: "4px 8px", textAlign: "right" }}>Rentabilidad</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const commissionAmount = r.price * r.commissionPercent;
+            const royaltyAmount = r.price * royaltyPercent;
+            const netObtained = r.price - commissionAmount - royaltyAmount;
+            const profitability = r.cost > 0 ? netObtained / r.cost : null;
+            return (
+              <tr key={`${r.productId}-${r.channelId}`} style={{ borderTop: "1px dashed var(--line)" }}>
+                <td style={{ padding: "4px 8px" }}>{r.productName}</td>
+                <td style={{ padding: "4px 8px", color: "var(--ink-soft)" }}>{r.channelName}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.price)}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right", color: r.cost === 0 ? "var(--risk)" : undefined }}>
+                  {r.cost === 0 ? "sin costo" : formatARS(r.cost)}
+                </td>
+                <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(commissionAmount)}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(royaltyAmount)}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(netObtained)}</td>
+                <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>
+                  {profitability === null ? "—" : `${(profitability * 100).toFixed(1)}%`}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function EditProductCostForm({ product, currentCost }: { product: Product; currentCost: number }) {
   const router = useRouter();
   const [cost, setCost] = useState(String(currentCost));

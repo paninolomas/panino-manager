@@ -530,6 +530,31 @@ consumo estimado de stock). Esos motores seguirán viendo estos pedidos
 importados como si fueran ventas de un solo día, lo cual los distorsionaría
 si se les diera de comer estos datos para ese fin.
 
+## Fase 15 — Calculadora de rentabilidad por producto, sin depender de ventas (ver migración 0036)
+
+"Quiero saber la rentabilidad de cada producto, no importa cuándo lo
+vendí" — el módulo existente solo calcula margen sobre ventas reales de un
+período (`sales_summary_by_product_channel`). Esto es un cálculo distinto:
+a partir del **precio vigente por canal** + **costo actual** (de la receta)
++ **comisión del canal** + **regalía de marca**, sin necesitar ninguna
+venta cargada. Coexiste con el módulo anterior, no lo reemplaza — el
+usuario todavía no decidió si lo va a seguir usando en paralelo.
+
+- **Regalía de marca**: 4% sobre la facturación, igual para las 3 marcas —
+  no existía ningún concepto de esto en el sistema. `royalty_rates`, una
+  sola tasa versionada por ubicación (no por marca ni canal, confirmado
+  explícitamente).
+- **Comisión de canal editable**: `channel_cost_items` nunca tuvo una forma
+  de cambiarse desde la app — comparando contra la planilla real del
+  usuario (35% en PedidosYa) contra el placeholder de 0019 (20%), quedó
+  claro que hacía falta. `set_channel_commission()`, mismo patrón
+  versionado que `set_channel_price` (0024).
+- `calculateProductProfitability()` (motor puro nuevo): comisión $, regalía
+  $, total obtenido, y "rentabilidad" = total obtenido / costo — no es
+  margen sobre precio, es cuántas veces se recupera el costo. Con test que
+  reproduce el ejemplo exacto del usuario (Sandwich Milanesa, 169,15%).
+- Tabla nueva en `/profitability`, arriba de todo lo demás.
+
 ## Qué falta después de Fase 1
 
 Ver el roadmap en los documentos de arquitectura entregados. Fase 2 es el
