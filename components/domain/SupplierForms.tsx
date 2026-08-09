@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiAction } from "../../lib/client/api-action";
+import { toNumber } from "../../lib/client/number";
 
 type Supplier = { id: string; name: string; default_payment_terms_days: number };
 type Account = { id: string; name: string };
@@ -24,7 +25,7 @@ export function SuppliersList({ suppliers }: { suppliers: Supplier[] }) {
   }
 
   async function saveEdit(id: string) {
-    const result = await apiAction(`/api/suppliers/${id}`, "PATCH", { name, defaultPaymentTermsDays: Number(terms) });
+    const result = await apiAction(`/api/suppliers/${id}`, "PATCH", { name, defaultPaymentTermsDays: toNumber(terms) });
     if (!result.ok) return setError(result.error ?? null);
     setEditingId(null);
     router.refresh();
@@ -132,7 +133,7 @@ export function ObligationRow({
 
   async function save() {
     const result = await apiAction(`/api/suppliers/obligations/${obligation.id}`, "PATCH", {
-      amount: Number(amount),
+      amount: toNumber(amount),
       estimatedDueDate: dueDate,
     });
     if (!result.ok) return setError(result.error ?? null);
@@ -192,7 +193,7 @@ export function NewSupplierForm() {
     const res = await fetch("/api/suppliers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, defaultPaymentTermsDays: Number(terms) }),
+      body: JSON.stringify({ name, defaultPaymentTermsDays: toNumber(terms) }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -237,7 +238,7 @@ export function NewObligationForm({ suppliers }: { suppliers: Supplier[] }) {
     const res = await fetch("/api/suppliers/obligations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ supplierId, amount: Number(amount), purchaseDate, estimatedDueDate: dueDate }),
+      body: JSON.stringify({ supplierId, amount: toNumber(amount), purchaseDate, estimatedDueDate: dueDate }),
     });
     setLoading(false);
     if (!res.ok) {

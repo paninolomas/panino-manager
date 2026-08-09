@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiAction } from "../../lib/client/api-action";
+import { toNumber } from "../../lib/client/number";
 
 type Channel = { id: string; name: string };
 type Product = { id: string; name: string };
@@ -30,7 +31,7 @@ export function RecipeEditor({ productId, stockItems, initialRecipe }: { product
   const [savedCost, setSavedCost] = useState<number | null>(null);
 
   const previewTotal = stockItems.reduce((sum, item) => {
-    const qty = Number(quantities[item.id]);
+    const qty = toNumber(quantities[item.id]);
     const line = initialRecipe.find((r) => r.stockItemId === item.id);
     const unitCost = line?.unitCost ?? 0;
     return sum + (qty > 0 ? qty * unitCost : 0);
@@ -39,7 +40,7 @@ export function RecipeEditor({ productId, stockItems, initialRecipe }: { product
   async function save() {
     setSaving(true);
     setError(null);
-    const lines = stockItems.map((item) => ({ stockItemId: item.id, quantity: Number(quantities[item.id]) || 0 }));
+    const lines = stockItems.map((item) => ({ stockItemId: item.id, quantity: toNumber(quantities[item.id]) || 0 }));
     const res = await fetch(`/api/sales/products/${productId}/recipe`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -125,7 +126,7 @@ export function ProductsList({ products, channels, stockItems }: { products: { i
   async function saveEdit(id: string) {
     const [nameResult, costResult] = await Promise.all([
       apiAction(`/api/sales/products/${id}`, "PATCH", { name }),
-      apiAction(`/api/sales/products/${id}/cost`, "POST", { currentCost: Number(cost) || 0 }),
+      apiAction(`/api/sales/products/${id}/cost`, "POST", { currentCost: toNumber(cost) || 0 }),
     ]);
     if (!nameResult.ok) return setError(nameResult.error ?? null);
     if (!costResult.ok) return setError(costResult.error ?? null);
@@ -141,7 +142,7 @@ export function ProductsList({ products, channels, stockItems }: { products: { i
   }
 
   async function savePrice(productId: string) {
-    const result = await apiAction("/api/channel-prices", "POST", { productId, channelId, price: Number(price) });
+    const result = await apiAction("/api/channel-prices", "POST", { productId, channelId, price: toNumber(price) });
     if (!result.ok) return setError(result.error ?? null);
     setPriceFormId(null);
     setPrice("");
@@ -259,7 +260,7 @@ export function NewSaleForm({ channels, products }: { channels: Channel[]; produ
       body: JSON.stringify({
         channelId,
         externalOrderNumber: externalOrderNumber || undefined,
-        items: [{ productId, quantity: Number(quantity), unitPrice: Number(unitPrice) }],
+        items: [{ productId, quantity: toNumber(quantity), unitPrice: toNumber(unitPrice) }],
       }),
     });
     setLoading(false);
@@ -330,7 +331,7 @@ export function NewProductForm() {
     const res = await fetch("/api/sales/products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, currentCost: Number(cost) || 0 }),
+      body: JSON.stringify({ name, currentCost: toNumber(cost) || 0 }),
     });
     setLoading(false);
     if (!res.ok) {

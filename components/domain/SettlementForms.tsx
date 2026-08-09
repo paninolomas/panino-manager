@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiAction } from "../../lib/client/api-action";
+import { toNumber } from "../../lib/client/number";
 
 type Channel = { id: string; name: string; settlement_model: string };
 type Account = { id: string; name: string };
@@ -36,7 +37,7 @@ export function ManualSettlementForm({ channels }: { channels: Channel[] }) {
     setError(null);
     const result = await apiAction("/api/settlements/manual", "POST", {
       channelId,
-      netAmount: Number(netAmount),
+      netAmount: toNumber(netAmount),
       expectedPaymentDate,
       notes: notes || undefined,
     });
@@ -334,12 +335,12 @@ export function AdvanceSimulatorForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         settlementId,
-        netReceivable: Number(netReceivable),
+        netReceivable: toNumber(netReceivable),
         normalPaymentDate,
         advanceDate,
-        advanceFeePercent: Number(feePercent) / 100,
-        vatPercent: Number(vatPercent) / 100,
-        projectedAvailableBeforeNormalDate: Number(projectedAvailable),
+        advanceFeePercent: toNumber(feePercent) / 100,
+        vatPercent: toNumber(vatPercent) / 100,
+        projectedAvailableBeforeNormalDate: toNumber(projectedAvailable),
       }),
     });
     const body = await res.json().catch(() => null);
@@ -429,7 +430,7 @@ export function ReserveTargetForm({ current }: { current: number }) {
     const res = await fetch("/api/reserve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: Number(amount) }),
+      body: JSON.stringify({ amount: toNumber(amount) }),
     });
     setLoading(false);
     if (!res.ok) {

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiAction } from "../../lib/client/api-action";
+import { toNumber } from "../../lib/client/number";
 
 type Account = { id: string; name: string; type: string };
 
@@ -138,7 +139,7 @@ export function OpeningBalanceForm({ accounts }: { accounts: Account[] }) {
     const res = await fetch(`/api/accounts/${accountId}/opening-balance`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: Number(amount), date, direction: "ingreso" }),
+      body: JSON.stringify({ amount: toNumber(amount), date, direction: "ingreso" }),
     });
     setLoading(false);
     if (!res.ok) {

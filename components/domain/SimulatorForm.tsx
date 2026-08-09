@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { runSimulation, PRICE_DELTA_PRESETS, VOLUME_DELTA_PRESETS, COST_DELTA_PRESETS, COMMISSION_PRESETS } from "../../lib/services/simulation-engine";
 import type { SimulationBaseline } from "../../types/domain";
+import { toNumber } from "../../lib/client/number";
 
 function formatARS(n: number) {
   return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
@@ -25,11 +26,11 @@ export function SimulatorForm({ defaultFixedCosts }: { defaultFixedCosts: number
 
   const baseline: SimulationBaseline = useMemo(
     () => ({
-      unitsSold: Number(unitsSold) || 0,
-      unitPrice: Number(unitPrice) || 0,
-      unitCost: Number(unitCost) || 0,
-      commissionPercent: (Number(commissionPercent) || 0) / 100,
-      fixedCosts: Number(fixedCosts) || 0,
+      unitsSold: toNumber(unitsSold) || 0,
+      unitPrice: toNumber(unitPrice) || 0,
+      unitCost: toNumber(unitCost) || 0,
+      commissionPercent: (toNumber(commissionPercent) || 0) / 100,
+      fixedCosts: toNumber(fixedCosts) || 0,
     }),
     [unitsSold, unitPrice, unitCost, commissionPercent, fixedCosts]
   );

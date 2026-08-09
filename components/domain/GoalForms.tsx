@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiAction } from "../../lib/client/api-action";
+import { toNumber } from "../../lib/client/number";
 
 /** Editar (monto objetivo / período) o eliminar un objetivo. A diferencia del resto de los módulos, goals no tiene ninguna tabla que lo referencie -- se permite borrar de verdad (policy "goals delete", 0032), no solo desactivar. */
 export function GoalActions({ goalId, targetValue, periodStart, periodEnd }: { goalId: string; targetValue: number; periodStart: string; periodEnd: string }) {
@@ -15,7 +16,7 @@ export function GoalActions({ goalId, targetValue, periodStart, periodEnd }: { g
 
   async function save() {
     const result = await apiAction(`/api/goals/${goalId}`, "PATCH", {
-      targetValue: Number(value),
+      targetValue: toNumber(value),
       periodStart: start,
       periodEnd: end,
     });
@@ -90,7 +91,7 @@ export function NewGoalForm() {
     const res = await fetch("/api/goals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, variable, targetValue: Number(targetValue), periodStart, periodEnd }),
+      body: JSON.stringify({ type, variable, targetValue: toNumber(targetValue), periodStart, periodEnd }),
     });
     setLoading(false);
     if (!res.ok) {

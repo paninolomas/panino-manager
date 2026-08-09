@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiAction } from "../../lib/client/api-action";
+import { toNumber } from "../../lib/client/number";
 
 type Account = { id: string; name: string };
 type Movement = { id: string; accountId: string; amount: number; direction: "ingreso" | "egreso"; originType: string };
@@ -80,7 +81,7 @@ export function ManualMovementForm({ accounts }: { accounts: Account[] }) {
       body: JSON.stringify({
         kind: "manual",
         accountId,
-        amount: Number(amount),
+        amount: toNumber(amount),
         direction,
         date,
         description,
@@ -154,7 +155,7 @@ export function TransferForm({ accounts }: { accounts: Account[] }) {
     const res = await fetch("/api/movements", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "transfer", fromAccount, toAccount, amount: Number(amount), date, description }),
+      body: JSON.stringify({ kind: "transfer", fromAccount, toAccount, amount: toNumber(amount), date, description }),
     });
     setLoading(false);
     if (!res.ok) {

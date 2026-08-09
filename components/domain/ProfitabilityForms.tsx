@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { RecipeEditor } from "./SalesForms";
+import { toNumber } from "../../lib/client/number";
 
 type Product = { id: string; name: string };
 type Channel = { id: string; name: string };
@@ -63,7 +64,7 @@ export function RoyaltyRateForm({ current }: { current: number }) {
     const res = await fetch("/api/royalty", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ percent: Number(percent) / 100 }),
+      body: JSON.stringify({ percent: toNumber(percent) / 100 }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -101,7 +102,7 @@ export function ChannelCommissionForm({ channel }: { channel: Channel & { commis
     const res = await fetch("/api/channel-commission", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channelId: channel.id, percent: Number(percent) / 100 }),
+      body: JSON.stringify({ channelId: channel.id, percent: toNumber(percent) / 100 }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -138,7 +139,7 @@ export function ChannelOnlinePaymentFeeForm({ channel }: { channel: Channel & { 
     const res = await fetch("/api/channel-online-payment-fee", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channelId: channel.id, percent: Number(percent) / 100 }),
+      body: JSON.stringify({ channelId: channel.id, percent: toNumber(percent) / 100 }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -224,7 +225,7 @@ export function ProductProfitabilityTable({
               max="100"
               step="1"
               value={thresholds.red}
-              onChange={(e) => setThresholds((t) => ({ ...t, red: Number(e.target.value) }))}
+              onChange={(e) => setThresholds((t) => ({ ...t, red: toNumber(e.target.value) }))}
               style={{ width: 56 }}
             />
             %
@@ -237,7 +238,7 @@ export function ProductProfitabilityTable({
               max="100"
               step="1"
               value={thresholds.yellow}
-              onChange={(e) => setThresholds((t) => ({ ...t, yellow: Number(e.target.value) }))}
+              onChange={(e) => setThresholds((t) => ({ ...t, yellow: toNumber(e.target.value) }))}
               style={{ width: 56 }}
             />
             %
@@ -250,7 +251,7 @@ export function ProductProfitabilityTable({
               max="200"
               step="1"
               value={thresholds.warning}
-              onChange={(e) => setThresholds((t) => ({ ...t, warning: Number(e.target.value) }))}
+              onChange={(e) => setThresholds((t) => ({ ...t, warning: toNumber(e.target.value) }))}
               style={{ width: 56 }}
             />
             %
@@ -328,7 +329,7 @@ export function EditProductCostForm({ product, currentCost }: { product: Product
     const res = await fetch(`/api/sales/products/${product.id}/cost`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentCost: Number(cost) }),
+      body: JSON.stringify({ currentCost: toNumber(cost) }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -371,7 +372,7 @@ export function SetChannelPriceForm({ products, channels }: { products: Product[
     const res = await fetch("/api/channel-prices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productId, channelId, price: Number(price) }),
+      body: JSON.stringify({ productId, channelId, price: toNumber(price) }),
     });
     setLoading(false);
     if (!res.ok) {

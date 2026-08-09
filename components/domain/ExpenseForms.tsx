@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiAction } from "../../lib/client/api-action";
+import { toNumber } from "../../lib/client/number";
 
 type Category = { id: string; name: string; type: string };
 type Account = { id: string; name: string };
@@ -30,7 +31,7 @@ export function ExpenseRow({
   async function save() {
     const result = await apiAction(`/api/expenses/${expense.id}`, "PATCH", {
       description,
-      amount: Number(amount),
+      amount: toNumber(amount),
       categoryId,
     });
     if (!result.ok) return setError(result.error ?? null);
@@ -224,7 +225,7 @@ export function NewExpenseForm({ categories }: { categories: Category[] }) {
     const res = await fetch("/api/expenses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ categoryId, description, amount: Number(amount), date }),
+      body: JSON.stringify({ categoryId, description, amount: toNumber(amount), date }),
     });
     setLoading(false);
     if (!res.ok) {

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiAction } from "../../lib/client/api-action";
+import { toNumber } from "../../lib/client/number";
 
 type StockItem = { id: string; name: string; unit: string; min_stock?: number; safety_stock?: number };
 type StockMovement = { id: string; stockItemId: string; quantity: number; direction: "entrada" | "salida"; date: string; originType: string };
@@ -127,8 +128,8 @@ export function NewStockItemForm() {
       body: JSON.stringify({
         name,
         unit,
-        minStock: Number(minStock),
-        safetyStock: Number(safetyStock),
+        minStock: toNumber(minStock),
+        safetyStock: toNumber(safetyStock),
       }),
     });
     setLoading(false);
@@ -195,7 +196,7 @@ export function StockMovementForm({ items }: { items: StockItem[] }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         stockItemId,
-        quantity: Number(quantity),
+        quantity: toNumber(quantity),
         direction,
         date,
         originType,
