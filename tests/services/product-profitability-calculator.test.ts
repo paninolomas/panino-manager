@@ -16,6 +16,9 @@ describe("calculateProductProfitability", () => {
     expect(result.netObtained).toBeCloseTo(11529, 0);
     expect(result.profitabilityPercent).not.toBeNull();
     expect(result.profitabilityPercent! * 100).toBeCloseTo(169.15, 1);
+    // Margen = ganancia / precio neto = (11529 - 6815.74) / 11529 = 40.87%
+    expect(result.marginPercent).not.toBeNull();
+    expect(result.marginPercent! * 100).toBeCloseTo(40.87, 1);
   });
 
   it("costo 0 devuelve profitabilityPercent null, no Infinity/NaN (evita mostrar un número que parece preciso sin serlo)", () => {
@@ -26,6 +29,8 @@ describe("calculateProductProfitability", () => {
       royaltyPercent: 0.04,
     });
     expect(result.profitabilityPercent).toBeNull();
+    // marginPercent sí tiene sentido con costo 0 (100% -- toda la venta es ganancia)
+    expect(result.marginPercent).toBeCloseTo(1, 5);
   });
 
   it("cuando el total obtenido no llega a cubrir el costo, la rentabilidad da menos de 100% (recupera menos de lo que costó)", () => {

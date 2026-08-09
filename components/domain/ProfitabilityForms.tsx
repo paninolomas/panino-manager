@@ -159,6 +159,7 @@ export function ProductProfitabilityTable({
             <th style={{ padding: "4px 8px", textAlign: "right" }}>Regalía</th>
             <th style={{ padding: "4px 8px", textAlign: "right" }}>Total obtenido</th>
             <th style={{ padding: "4px 8px", textAlign: "right" }}>Rentabilidad</th>
+            <th style={{ padding: "4px 8px", textAlign: "right" }}>Margen</th>
           </tr>
         </thead>
         <tbody>
@@ -167,6 +168,7 @@ export function ProductProfitabilityTable({
             const royaltyAmount = r.price * royaltyPercent;
             const netObtained = r.price - commissionAmount - royaltyAmount;
             const profitability = r.cost > 0 ? netObtained / r.cost : null;
+            const margin = netObtained > 0 ? (netObtained - r.cost) / netObtained : null;
             return (
               <tr key={`${r.productId}-${r.channelId}`} style={{ borderTop: "1px dashed var(--line)" }}>
                 <td style={{ padding: "4px 8px" }}>{r.productName}</td>
@@ -180,6 +182,9 @@ export function ProductProfitabilityTable({
                 <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(netObtained)}</td>
                 <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>
                   {profitability === null ? "—" : `${(profitability * 100).toFixed(1)}%`}
+                </td>
+                <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>
+                  {margin === null ? "—" : `${(margin * 100).toFixed(1)}%`}
                 </td>
               </tr>
             );

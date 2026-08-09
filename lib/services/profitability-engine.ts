@@ -41,6 +41,8 @@ export interface ProductProfitabilityResult {
   netObtained: number;
   /** null si cost=0 -- dividir por cero daría un número que parece preciso sin serlo (mismo criterio que calculateMarginPercent de abajo). */
   profitabilityPercent: number | null;
+  /** Ganancia ÷ precio neto (precio - comisión - regalía) -- distinto de "rentabilidad": nunca pasa de 100%, es la porción de cada venta que es ganancia. null si netObtained<=0 (no tiene sentido "margen sobre precio neto" si ese precio neto no es positivo). */
+  marginPercent: number | null;
 }
 
 export function calculateProductProfitability(input: ProductProfitabilityInput): ProductProfitabilityResult {
@@ -48,7 +50,8 @@ export function calculateProductProfitability(input: ProductProfitabilityInput):
   const royaltyAmount = input.price * input.royaltyPercent;
   const netObtained = input.price - commissionAmount - royaltyAmount;
   const profitabilityPercent = input.cost > 0 ? netObtained / input.cost : null;
-  return { commissionAmount, royaltyAmount, netObtained, profitabilityPercent };
+  const marginPercent = netObtained > 0 ? (netObtained - input.cost) / netObtained : null;
+  return { commissionAmount, royaltyAmount, netObtained, profitabilityPercent, marginPercent };
 }
 
 /** Precio neto = precio realmente cobrado menos la comisión del canal. */
