@@ -12,6 +12,14 @@ export async function listStockItems() {
   return data;
 }
 
+/** Costo vigente por insumo (stock_item_costs, valid_to is null) -- fuente para prellenar el formulario de costo y para el motor de recetas. Insumo sin fila acá = sin costo cargado todavía, no 0 (recipe-engine.ts ya distingue esto). */
+export async function listStockItemCosts(): Promise<Record<string, number>> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("stock_item_costs").select("stock_item_id, unit_cost").is("valid_to", null);
+  if (error) throw error;
+  return Object.fromEntries((data ?? []).map((c) => [c.stock_item_id, Number(c.unit_cost)]));
+}
+
 export async function updateStockItem(
   stockItemId: string,
   input: { name?: string; unit?: string; minStock?: number; safetyStock?: number; active?: boolean }

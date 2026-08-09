@@ -1,4 +1,4 @@
-import { listStockItems, listStockMovements } from "../../../lib/repositories/stock.repo";
+import { listStockItems, listStockItemCosts, listStockMovements } from "../../../lib/repositories/stock.repo";
 import { requireSession } from "../../../lib/auth/session";
 import {
   estimateDailyConsumption,
@@ -7,7 +7,7 @@ import {
   buildPurchaseRecommendations,
   sortByPurchasePriority,
 } from "../../../lib/services/stock-engine";
-import { NewStockItemForm, StockMovementForm, StockItemEditToggle, StockMovementsList } from "../../../components/domain/StockForms";
+import { NewStockItemForm, StockMovementForm, StockItemEditToggle, StockItemCostForm, StockMovementsList } from "../../../components/domain/StockForms";
 
 const CONFIDENCE_LABEL: Record<string, string> = {
   real: "🟢 Real",
@@ -25,7 +25,7 @@ const PRIORITY_PILL: Record<string, string> = {
 
 export default async function StockPage() {
   const profile = await requireSession();
-  const [items, movements] = await Promise.all([listStockItems(), listStockMovements()]);
+  const [items, movements, itemCosts] = await Promise.all([listStockItems(), listStockMovements(), listStockItemCosts()]);
 
   const asOfDate = new Date().toISOString().slice(0, 10);
   const movementsByItem: Record<string, typeof movements> = {};
@@ -80,6 +80,7 @@ export default async function StockPage() {
                   {coverage.days === null ? "—" : `${coverage.days.toFixed(1)} días`}
                 </span>
                 <span className="pill">{CONFIDENCE_LABEL[coverage.confidence]}</span>
+                {profile.role === "socio" && <StockItemCostForm item={i} currentCost={itemCosts[i.id] ?? null} />}
                 {profile.role === "socio" && <StockItemEditToggle item={i} />}
               </span>
             </div>

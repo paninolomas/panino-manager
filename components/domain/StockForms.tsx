@@ -8,6 +8,128 @@ import { toNumber } from "../../lib/client/number";
 type StockItem = { id: string; name: string; unit: string; min_stock?: number; safety_stock?: number };
 type StockMovement = { id: string; stockItemId: string; quantity: number; direction: "entrada" | "salida"; date: string; originType: string };
 
+/**
+ * Carga/actualiza el costo vigente de un insumo (stock_item_costs,
+ * versionado vía set_stock_item_cost 0039). Al guardar, recipes.repo.ts
+ * recalcula en cascada products.current_cost de todos los productos que
+ * usan este insumo en su receta -- confirmado con el usuario: solo hace
+ * falta tocar el costo del insumo, no reabrir cada receta.
+ *
+ * Dos modos de carga, elegibles cada vez (decisión del usuario):
+ *   - "Directo": ya sabés el costo por kg/unidad, lo escribís tal cual.
+ *   - "Por compra": tenés el total pagado + cuánto compraste (ej. "pagué
+ *     $9.000 por 3kg de lomo") y la app hace la división antes de guardar.
+ */
+export function StockItemCostForm({ item, currentCost }: { item: StockItem; currentCost: number | null }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"directo" | "compra">("directo");
+  const [unitCost, setUnitCost] = useState(currentCost !== null ? String(currentCost) : "");
+  const [totalPaid, setTotalPaid] = useState("");
+  const [purchasedQty, setPurchasedQty] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ productId: string; productName: string; cost: number }[] | null>(null);
+
+  const computedUnitCost =
+    mode === "compra" && toNumber(totalPaid) > 0 && toNumber(purchasedQty) > 0 ? toNumber(totalPaid) / toNumber(purchasedQty) : null;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const finalUnitCost = mode === "directo" ? toNumber(unitCost) : computedUnitCost;
+    if (finalUnitCost === null || Number.isNaN(finalUnitCost) || finalUnitCost < 0) {
+      setError("Completá un costo válido.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    const res = await fetch(`/api/stock-items/${item.id}/cost`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ unitCost: finalUnitCost }),
+    });
+    const body = await res.json().catch(() => null);
+    setLoading(false);
+    if (!res.ok) {
+      setError(body?.error?.toString() ?? "No se pudo actualizar el costo.");
+      return;
+    }
+    setResult(body.updatedProducts as { productId: string; productName: string; cost: number }[]);
+    setUnitCost(String(finalUnitCost));
+    setTotalPaid("");
+    setPurchasedQty("");
+    router.refresh();
+  }
+
+  if (!open) {
+    return (
+      <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => setOpen(true)}>
+        {currentCost === null ? "Cargar costo" : `$${currentCost.toLocaleString("es-AR")}/${item.unit}`}
+      </button>
+    );
+  }
+
+  return (
+    <div className="stack" style={{ border: "1px dashed var(--line)", borderRadius: 8, padding: 10, minWidth: 260 }}>
+      {error && <span style={{ color: "var(--risk)", fontSize: 12 }}>{error}</span>}
+      <div className="row" style={{ fontSize: 12, gap: 12 }}>
+        <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <input type="radio" checked={mode === "directo"} onChange={() => setMode("directo")} />
+          Directo (por {item.unit})
+        </label>
+        <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          <input type="radio" checked={mode === "compra"} onChange={() => setMode("compra")} />
+          Por compra (total + cantidad)
+        </label>
+      </div>
+
+      <form onSubmit={handleSubmit} className="stack" style={{ gap: 6 }}>
+        {mode === "directo" ? (
+          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
+            Costo por {item.unit}
+            <input type="number" required min="0" step="0.0001" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} style={{ width: 110 }} />
+          </label>
+        ) : (
+          <>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
+              Total pagado
+              <input type="number" required min="0" step="0.01" value={totalPaid} onChange={(e) => setTotalPaid(e.target.value)} style={{ width: 110 }} />
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 13 }}>
+              Cantidad comprada ({item.unit})
+              <input type="number" required min="0.0001" step="0.0001" value={purchasedQty} onChange={(e) => setPurchasedQty(e.target.value)} style={{ width: 110 }} />
+            </label>
+            {computedUnitCost !== null && (
+              <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+                = ${computedUnitCost.toLocaleString("es-AR", { maximumFractionDigits: 4 })} por {item.unit}
+              </p>
+            )}
+          </>
+        )}
+        <span style={{ display: "flex", gap: 8 }}>
+          <button className="btn" type="submit" disabled={loading} style={{ padding: "4px 10px", fontSize: 13 }}>
+            {loading ? "…" : "Guardar costo"}
+          </button>
+          <button className="btn-secondary" type="button" onClick={() => setOpen(false)} style={{ padding: "4px 10px", fontSize: 13 }}>
+            Cerrar
+          </button>
+        </span>
+      </form>
+
+      {result && (
+        <p style={{ fontSize: 12, color: "var(--positive)" }}>
+          {result.length === 0
+            ? "Costo guardado. Ningún producto usa este insumo en su receta todavía."
+            : `Costo guardado. Se recalcularon ${result.length} producto${result.length === 1 ? "" : "s"}: ${result
+                .map((r) => `${r.productName} ($${r.cost.toLocaleString("es-AR")})`)
+                .join(", ")}.`}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Botón inline para editar nombre/unidad/stock mínimo/de seguridad de un insumo, y desactivarlo. Sin borrado real -- product_recipe_items/stock_movements referencian stock_item_id por FK. */
 export function StockItemEditToggle({ item }: { item: StockItem }) {
   const router = useRouter();

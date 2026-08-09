@@ -10,6 +10,41 @@ export type RecipeLine = {
   unitCost: number;
 };
 
+/**
+ * Actualiza el costo vigente de un insumo (versionado, via set_stock_item_cost
+ * 0039) y recalcula en cascada products.current_cost de TODOS los productos
+ * que lo usan en su receta -- decisión confirmada con el usuario: "lo único
+ * que tengo que cambiar es el costo del insumo", no reabrir cada receta a
+ * mano. El cálculo en sí sigue en TypeScript puro (calculateRecipeCost),
+ * la función SQL solo versiona el dato y devuelve qué productos tocar.
+ */
+export async function setStockItemCost(
+  stockItemId: string,
+  unitCost: number
+): Promise<{ productId: string; productName: string; cost: number }[]> {
+  const supabase = await createSupabaseServerClient();
+
+  const { error: costError } = await supabase.rpc("set_stock_item_cost", {
+    p_stock_item_id: stockItemId,
+    p_unit_cost: unitCost,
+  });
+  if (costError) throw costError;
+
+  const { data: affected, error: affectedError } = await supabase.rpc("products_using_stock_item", {
+    p_stock_item_id: stockItemId,
+  });
+  if (affectedError) throw affectedError;
+
+  const results: { productId: string; productName: string; cost: number }[] = [];
+  for (const row of (affected ?? []) as { product_id: string; product_name: string }[]) {
+    const recipe = await getProductRecipe(row.product_id);
+    const cost = calculateRecipeCost(recipe.map((r) => ({ quantity: r.quantity, unitCost: r.unitCost })));
+    await updateProductCost(row.product_id, cost);
+    results.push({ productId: row.product_id, productName: row.product_name, cost });
+  }
+  return results;
+}
+
 /** Lee la receta actual de un producto vía product_recipe_with_costs (0031) -- ya trae nombre/unidad/costo unitario resuelto, no hace falta cruzar nada más acá. */
 export async function getProductRecipe(productId: string): Promise<RecipeLine[]> {
   const supabase = await createSupabaseServerClient();
