@@ -280,7 +280,12 @@ export function ProductProfitabilityTable({
             const onlinePaymentFeeAmount = r.price * r.onlinePaymentFeePercent;
             const netObtained = r.price - commissionAmount - royaltyAmount - onlinePaymentFeeAmount;
             const profitability = r.cost > 0 ? netObtained / r.cost : null;
-            const margin = netObtained > 0 ? (netObtained - r.cost) / netObtained : null;
+            // Igual que profitability: sin costo cargado no hay margen real que
+            // mostrar. Antes esto daba (netObtenido - 0) / netObtenido = 100%,
+            // un artefacto de la fórmula que además se pintaba en amarillo como
+            // si fuera una alerta real, mezclando "no hay dato" con "revisar
+            // esto".
+            const margin = r.cost > 0 && netObtained > 0 ? (netObtained - r.cost) / netObtained : null;
             return (
               <tr key={`${r.productId}-${r.channelId}`} style={{ borderTop: "1px dashed var(--line)" }}>
                 <td style={{ padding: "4px 8px" }}>{r.productName}</td>
