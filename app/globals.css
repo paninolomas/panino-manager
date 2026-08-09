@@ -68,6 +68,28 @@ textarea {
   padding: 20px 16px 88px;
 }
 
+/* Escapa del ancho fijo del .container (720px) para tablas anchas puntuales,
+   sin tocar el layout general -- técnica "full-bleed" clásica: el elemento
+   se estira al 100% del viewport independientemente del max-width de
+   cualquier ancestro, y adentro .full-bleed-inner limita el contenido real
+   a un ancho legible. Usada por la tabla de Rentabilidad por producto para
+   que entren todas las columnas (Precio, Costo, Comisión, Regalía, Pago en
+   línea, Total obtenido, Rentabilidad, Margen) sin scroll horizontal. */
+.full-bleed {
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.full-bleed-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--line);

@@ -167,7 +167,24 @@ export function ChannelOnlinePaymentFeeForm({ channel }: { channel: Channel & { 
  * ventas cargadas, a diferencia del resto del módulo. Cálculo en
  * calculateProductProfitability (profitability-engine.ts), esto solo arma
  * las filas.
+ *
+ * Umbrales de referencia del semáforo de Margen -- referencia general de
+ * gastronomía (food cost 28-35% ≈ margen 65%+ saludable), NO un estándar
+ * exacto para este negocio, por eso son editables acá mismo (estado local,
+ * no persistido -- son un criterio visual de lectura rápida, no un dato de
+ * negocio que necesite versionado ni auditoría).
  */
+const DEFAULT_MARGIN_THRESHOLDS = { red: 50, yellow: 65, warning: 90 };
+
+function marginColor(marginPercent: number | null, thresholds: { red: number; yellow: number; warning: number }) {
+  if (marginPercent === null) return undefined;
+  const pct = marginPercent * 100;
+  if (pct < thresholds.red) return "var(--risk)";
+  if (pct < thresholds.yellow) return "var(--warning)";
+  if (pct > thresholds.warning) return "var(--warning)"; // margen sospechosamente alto -- probable costo/receta sin cargar
+  return "var(--positive)";
+}
+
 export function ProductProfitabilityTable({
   rows,
   royaltyPercent,
@@ -175,6 +192,9 @@ export function ProductProfitabilityTable({
   rows: { productId: string; productName: string; channelId: string; channelName: string; price: number; cost: number; commissionPercent: number; onlinePaymentFeePercent: number }[];
   royaltyPercent: number;
 }) {
+  const [thresholds, setThresholds] = useState(DEFAULT_MARGIN_THRESHOLDS);
+  const [editingThresholds, setEditingThresholds] = useState(false);
+
   function formatARS(n: number) {
     return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
   }
@@ -184,7 +204,60 @@ export function ProductProfitabilityTable({
   }
 
   return (
-    <div className="stack" style={{ overflowX: "auto" }}>
+    <div className="stack full-bleed">
+      <div className="full-bleed-inner stack">
+      <div className="row" style={{ alignItems: "center", fontSize: 12, color: "var(--ink-soft)" }}>
+        <span>
+          🔴 Margen &lt; {thresholds.red}% · 🟡 {thresholds.red}–{thresholds.yellow}% o &gt; {thresholds.warning}% (revisar costo/receta) · 🟢 saludable
+        </span>
+        <button className="btn btn-secondary" type="button" style={{ padding: "2px 8px", fontSize: 12 }} onClick={() => setEditingThresholds((v) => !v)}>
+          {editingThresholds ? "Cerrar" : "Ajustar umbrales"}
+        </button>
+      </div>
+      {editingThresholds && (
+        <div className="row" style={{ gap: 12, alignItems: "center", fontSize: 12 }}>
+          <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            Rojo por debajo de
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={thresholds.red}
+              onChange={(e) => setThresholds((t) => ({ ...t, red: Number(e.target.value) }))}
+              style={{ width: 56 }}
+            />
+            %
+          </label>
+          <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            Verde a partir de
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={thresholds.yellow}
+              onChange={(e) => setThresholds((t) => ({ ...t, yellow: Number(e.target.value) }))}
+              style={{ width: 56 }}
+            />
+            %
+          </label>
+          <label style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            Alerta por arriba de
+            <input
+              type="number"
+              min="0"
+              max="200"
+              step="1"
+              value={thresholds.warning}
+              onChange={(e) => setThresholds((t) => ({ ...t, warning: Number(e.target.value) }))}
+              style={{ width: 56 }}
+            />
+            %
+          </label>
+        </div>
+      )}
+      <div style={{ overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead>
           <tr style={{ textAlign: "left", color: "var(--ink-soft)", fontSize: 12 }}>
@@ -223,7 +296,7 @@ export function ProductProfitabilityTable({
                 <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>
                   {profitability === null ? "—" : `${(profitability * 100).toFixed(1)}%`}
                 </td>
-                <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>
+                <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600, color: marginColor(margin, thresholds) }}>
                   {margin === null ? "—" : `${(margin * 100).toFixed(1)}%`}
                 </td>
               </tr>
@@ -231,6 +304,8 @@ export function ProductProfitabilityTable({
           })}
         </tbody>
       </table>
+      </div>
+      </div>
     </div>
   );
 }
