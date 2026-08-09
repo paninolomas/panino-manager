@@ -2,7 +2,7 @@ import { listProducts, listChannels } from "../../../lib/repositories/sales.repo
 import { listStockItems, listStockItemCosts } from "../../../lib/repositories/stock.repo";
 import { listLatestMarginSnapshots, getProductProfitabilityInputs, getActiveRoyaltyRate, getCommissionByChannel, getOnlinePaymentFeeByChannel } from "../../../lib/repositories/profitability.repo";
 import { requireSocio } from "../../../lib/auth/session";
-import { rankByMarginPercent, detectMarginDrops, calculateProductProfitability } from "../../../lib/services/profitability-engine";
+import { detectMarginDrops, calculateProductProfitability } from "../../../lib/services/profitability-engine";
 import type { MarginSnapshot } from "../../../types/domain";
 import {
   ProductCostRow,
@@ -66,14 +66,14 @@ export default async function ProfitabilityPage() {
     ? snapshots.filter((s, i) => (rawSnapshots ?? [])[i]?.period_end === previousPeriodEnd)
     : [];
 
-  const byMargin = rankByMarginPercent(current);
   const alerts = detectMarginDrops({ previous, current, thresholdPoints: MARGIN_DROP_THRESHOLD });
 
-  // "Más ganancia total" y "Por canal" -- a pedido del usuario, dejan de ser
-  // un acumulado de unidades vendidas en un período (margin_snapshots) y
-  // pasan a resumir la calculadora de arriba (product_profitability_inputs):
-  // no depende de haber vendido nada, es "si vendo UNA unidad de cada cosa,
-  // cuál me deja más plata" en vez de "cuánto dejé acumulado hasta ahora".
+  // "Mejor margen %", "Más ganancia total" y "Por canal" -- a pedido del
+  // usuario, dejan de ser un acumulado de unidades vendidas en un período
+  // (margin_snapshots) y pasan a resumir la calculadora de arriba
+  // (product_profitability_inputs): no depende de haber vendido nada, es
+  // "si vendo UNA unidad de cada cosa, cuál me deja más plata" en vez de
+  // "cuánto dejé acumulado hasta ahora".
   const calculatorResults = profitabilityRows.map((r) => ({
     ...r,
     ...calculateProductProfitability({
@@ -85,6 +85,14 @@ export default async function ProfitabilityPage() {
       discountPercent: r.discountPercent,
     }),
   }));
+
+  // Los "sin costo cargado" (marginPercent null, "—" en la tabla) quedan
+  // afuera del ranking -- no tiene sentido que compitan por "mejor margen"
+  // cuando en realidad no hay margen real calculado, solo falta el dato.
+  const topByMargin = calculatorResults
+    .filter((r): r is typeof r & { marginPercent: number } => r.marginPercent !== null)
+    .sort((a, b) => b.marginPercent - a.marginPercent)
+    .slice(0, 5);
 
   const topByNetObtained = [...calculatorResults].sort((a, b) => b.netObtained - a.netObtained).slice(0, 5);
 
@@ -133,30 +141,20 @@ export default async function ProfitabilityPage() {
         </section>
       )}
 
-      {current.length === 0 ? (
-        <section className="card">
-          <p style={{ color: "var(--ink-soft)" }}>
-            Todavía no generaste ningún período de rentabilidad basado en ventas reales (sección
-            "Recalcular rentabilidad" más abajo). El ranking por margen % de ventas reales
-            aparece acá una vez que lo generes.
-          </p>
-        </section>
-      ) : (
-        <section className="card stack">
-          <div className="label">Mejor margen % (período {latestPeriodEnd})</div>
-          {byMargin.slice(0, 5).map((s) => (
-            <div key={`${s.productId}-${s.channelId}-m`} className="row">
-              <span>
-                {productName(s.productId)} · {channelName(s.channelId)}
-              </span>
-              <span className="figure">{formatPct(s.marginPercent)}</span>
-            </div>
-          ))}
-        </section>
-      )}
-
       {calculatorResults.length > 0 && (
         <>
+          <section className="card stack">
+            <div className="label">Mejor margen % (calculadora, por producto -- no acumulado de ventas)</div>
+            {topByMargin.map((s) => (
+              <div key={`${s.productId}-${s.channelId}-m`} className="row">
+                <span>
+                  {s.productName} · {s.channelName}
+                </span>
+                <span className="figure">{formatPct(s.marginPercent)}</span>
+              </div>
+            ))}
+          </section>
+
           <section className="card stack">
             <div className="label">Más ganancia total (calculadora, por producto -- no acumulado de ventas)</div>
             {topByNetObtained.map((s) => (
