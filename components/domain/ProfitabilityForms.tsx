@@ -177,6 +177,54 @@ export function ChannelOnlinePaymentFeeForm({ channel }: { channel: Channel & { 
  */
 const DEFAULT_MARGIN_THRESHOLDS = { red: 50, yellow: 65, warning: 90 };
 
+type SortKey =
+  | "productName"
+  | "channelName"
+  | "price"
+  | "cost"
+  | "commissionAmount"
+  | "royaltyAmount"
+  | "onlinePaymentFeeAmount"
+  | "netObtained"
+  | "profitability"
+  | "margin";
+
+type EnrichedRow = {
+  productId: string;
+  productName: string;
+  channelId: string;
+  channelName: string;
+  price: number;
+  cost: number;
+  commissionAmount: number;
+  royaltyAmount: number;
+  onlinePaymentFeeAmount: number;
+  netObtained: number;
+  profitability: number | null;
+  margin: number | null;
+};
+
+/**
+ * Ordena por la columna elegida. Los valores null (Rentabilidad/Margen sin
+ * costo cargado, "—" en la tabla) quedan SIEMPRE al final sin importar la
+ * dirección -- si no, "de mayor a menor" pondría los "—" primero (null
+ * como si fuera "menor que cualquier número" en JS), que es justo al
+ * revés de lo útil: lo que no tiene dato no debería taparle el podio a lo
+ * que sí lo tiene.
+ */
+function sortRows(rows: EnrichedRow[], key: SortKey, dir: "asc" | "desc"): EnrichedRow[] {
+  const factor = dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const av = a[key];
+    const bv = b[key];
+    if (av === null && bv === null) return 0;
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    if (typeof av === "string" && typeof bv === "string") return av.localeCompare(bv) * factor;
+    return ((av as number) - (bv as number)) * factor;
+  });
+}
+
 function marginColor(marginPercent: number | null, thresholds: { red: number; yellow: number; warning: number }) {
   if (marginPercent === null) return undefined;
   const pct = marginPercent * 100;
@@ -195,6 +243,7 @@ export function ProductProfitabilityTable({
 }) {
   const [thresholds, setThresholds] = useState(DEFAULT_MARGIN_THRESHOLDS);
   const [editingThresholds, setEditingThresholds] = useState(false);
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
 
   function formatARS(n: number) {
     return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
@@ -202,6 +251,47 @@ export function ProductProfitabilityTable({
 
   if (rows.length === 0) {
     return <p style={{ color: "var(--ink-soft)" }}>No hay precios por canal cargados todavía -- cargalos en Ventas para que aparezcan acá.</p>;
+  }
+
+  // Se calculan una sola vez acá (no adentro del .map de render) para poder
+  // ordenar por columnas derivadas (Total obtenido, Rentabilidad, Margen)
+  // sin repetir la cuenta.
+  const enrichedRows = rows.map((r) => {
+    const commissionAmount = r.price * r.commissionPercent;
+    const royaltyAmount = r.price * royaltyPercent;
+    const onlinePaymentFeeAmount = r.price * r.onlinePaymentFeePercent;
+    const netObtained = r.price - commissionAmount - royaltyAmount - onlinePaymentFeeAmount;
+    const profitability = r.cost > 0 ? netObtained / r.cost : null;
+    // Igual que profitability: sin costo cargado no hay margen real que
+    // mostrar. Antes esto daba (netObtenido - 0) / netObtenido = 100%,
+    // un artefacto de la fórmula que además se pintaba en amarillo como
+    // si fuera una alerta real, mezclando "no hay dato" con "revisar
+    // esto".
+    const margin = r.cost > 0 && netObtained > 0 ? (netObtained - r.cost) / netObtained : null;
+    return { ...r, commissionAmount, royaltyAmount, onlinePaymentFeeAmount, netObtained, profitability, margin };
+  });
+
+  const sortedRows = sort ? sortRows(enrichedRows, sort.key, sort.dir) : enrichedRows;
+
+  function toggleSort(key: SortKey) {
+    setSort((current) => {
+      if (current?.key !== key) return { key, dir: "desc" };
+      if (current.dir === "desc") return { key, dir: "asc" };
+      return null; // tercer click en la misma columna = sacar el orden
+    });
+  }
+
+  function SortableHeader({ label, sortKey, align = "right" }: { label: string; sortKey: SortKey; align?: "left" | "right" }) {
+    const active = sort?.key === sortKey;
+    return (
+      <th
+        style={{ padding: "4px 8px", textAlign: align, cursor: "pointer", userSelect: "none", color: active ? "var(--ink)" : undefined }}
+        onClick={() => toggleSort(sortKey)}
+        title="Ordenar"
+      >
+        {label} {active ? (sort!.dir === "desc" ? "▼" : "▲") : ""}
+      </th>
+    );
   }
 
   return (
@@ -262,52 +352,39 @@ export function ProductProfitabilityTable({
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead>
           <tr style={{ textAlign: "left", color: "var(--ink-soft)", fontSize: 12 }}>
-            <th style={{ padding: "4px 8px" }}>Producto</th>
-            <th style={{ padding: "4px 8px" }}>Canal</th>
-            <th style={{ padding: "4px 8px", textAlign: "right" }}>Precio</th>
-            <th style={{ padding: "4px 8px", textAlign: "right" }}>Costo</th>
-            <th style={{ padding: "4px 8px", textAlign: "right" }}>Comisión</th>
-            <th style={{ padding: "4px 8px", textAlign: "right" }}>Regalía</th>
-            <th style={{ padding: "4px 8px", textAlign: "right" }}>Pago en línea</th>
-            <th style={{ padding: "4px 8px", textAlign: "right" }}>Total obtenido</th>
-            <th style={{ padding: "4px 8px", textAlign: "right" }}>Rentabilidad</th>
-            <th style={{ padding: "4px 8px", textAlign: "right" }}>Margen</th>
+            <SortableHeader label="Producto" sortKey="productName" align="left" />
+            <SortableHeader label="Canal" sortKey="channelName" align="left" />
+            <SortableHeader label="Precio" sortKey="price" />
+            <SortableHeader label="Costo" sortKey="cost" />
+            <SortableHeader label="Comisión" sortKey="commissionAmount" />
+            <SortableHeader label="Regalía" sortKey="royaltyAmount" />
+            <SortableHeader label="Pago en línea" sortKey="onlinePaymentFeeAmount" />
+            <SortableHeader label="Total obtenido" sortKey="netObtained" />
+            <SortableHeader label="Rentabilidad" sortKey="profitability" />
+            <SortableHeader label="Margen" sortKey="margin" />
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
-            const commissionAmount = r.price * r.commissionPercent;
-            const royaltyAmount = r.price * royaltyPercent;
-            const onlinePaymentFeeAmount = r.price * r.onlinePaymentFeePercent;
-            const netObtained = r.price - commissionAmount - royaltyAmount - onlinePaymentFeeAmount;
-            const profitability = r.cost > 0 ? netObtained / r.cost : null;
-            // Igual que profitability: sin costo cargado no hay margen real que
-            // mostrar. Antes esto daba (netObtenido - 0) / netObtenido = 100%,
-            // un artefacto de la fórmula que además se pintaba en amarillo como
-            // si fuera una alerta real, mezclando "no hay dato" con "revisar
-            // esto".
-            const margin = r.cost > 0 && netObtained > 0 ? (netObtained - r.cost) / netObtained : null;
-            return (
-              <tr key={`${r.productId}-${r.channelId}`} style={{ borderTop: "1px dashed var(--line)" }}>
-                <td style={{ padding: "4px 8px" }}>{r.productName}</td>
-                <td style={{ padding: "4px 8px", color: "var(--ink-soft)" }}>{r.channelName}</td>
-                <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.price)}</td>
-                <td style={{ padding: "4px 8px", textAlign: "right", color: r.cost === 0 ? "var(--risk)" : undefined }}>
-                  {r.cost === 0 ? "sin costo" : formatARS(r.cost)}
-                </td>
-                <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(commissionAmount)}</td>
-                <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(royaltyAmount)}</td>
-                <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(onlinePaymentFeeAmount)}</td>
-                <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(netObtained)}</td>
-                <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>
-                  {profitability === null ? "—" : `${(profitability * 100).toFixed(1)}%`}
-                </td>
-                <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600, color: marginColor(margin, thresholds) }}>
-                  {margin === null ? "—" : `${(margin * 100).toFixed(1)}%`}
-                </td>
-              </tr>
-            );
-          })}
+          {sortedRows.map((r) => (
+            <tr key={`${r.productId}-${r.channelId}`} style={{ borderTop: "1px dashed var(--line)" }}>
+              <td style={{ padding: "4px 8px" }}>{r.productName}</td>
+              <td style={{ padding: "4px 8px", color: "var(--ink-soft)" }}>{r.channelName}</td>
+              <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.price)}</td>
+              <td style={{ padding: "4px 8px", textAlign: "right", color: r.cost === 0 ? "var(--risk)" : undefined }}>
+                {r.cost === 0 ? "sin costo" : formatARS(r.cost)}
+              </td>
+              <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.commissionAmount)}</td>
+              <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.royaltyAmount)}</td>
+              <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.onlinePaymentFeeAmount)}</td>
+              <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.netObtained)}</td>
+              <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>
+                {r.profitability === null ? "—" : `${(r.profitability * 100).toFixed(1)}%`}
+              </td>
+              <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600, color: marginColor(r.margin, thresholds) }}>
+                {r.margin === null ? "—" : `${(r.margin * 100).toFixed(1)}%`}
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
       </div>
