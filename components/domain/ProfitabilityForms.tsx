@@ -185,6 +185,7 @@ type SortKey =
   | "commissionAmount"
   | "royaltyAmount"
   | "onlinePaymentFeeAmount"
+  | "discountAmount"
   | "netObtained"
   | "profitability"
   | "margin";
@@ -196,9 +197,11 @@ type EnrichedRow = {
   channelName: string;
   price: number;
   cost: number;
+  discountPercent: number;
   commissionAmount: number;
   royaltyAmount: number;
   onlinePaymentFeeAmount: number;
+  discountAmount: number;
   netObtained: number;
   profitability: number | null;
   margin: number | null;
@@ -234,13 +237,107 @@ function marginColor(marginPercent: number | null, thresholds: { red: number; ye
   return "var(--positive)";
 }
 
+/**
+ * Celda editable inline, usada tanto para Precio como para Descuento en la
+ * tabla de Rentabilidad. Guarda al perder foco (blur) o con Enter, no en
+ * cada tecla -- evita mandar un request por cada dígito tipeado. Muestra
+ * un estado breve de "guardando…" / "✓" / error debajo del input.
+ */
+function InlineEditableCell({
+  value,
+  onSave,
+  width = 90,
+  formatDisplay,
+}: {
+  value: number;
+  onSave: (newValue: number) => Promise<{ ok: boolean; error?: string }>;
+  width?: number;
+  formatDisplay: (n: number) => string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function commit() {
+    const parsed = toNumber(draft);
+    setEditing(false);
+    if (Number.isNaN(parsed) || parsed < 0 || parsed === value) {
+      setDraft(String(value));
+      return;
+    }
+    setStatus("saving");
+    setError(null);
+    const result = await onSave(parsed);
+    if (!result.ok) {
+      setStatus("error");
+      setError(result.error ?? "No se pudo guardar.");
+      setDraft(String(value));
+      return;
+    }
+    setStatus("saved");
+    setTimeout(() => setStatus("idle"), 1500);
+  }
+
+  if (!editing) {
+    return (
+      <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+        <span
+          onClick={() => {
+            setDraft(String(value));
+            setEditing(true);
+          }}
+          style={{ cursor: "pointer", borderBottom: "1px dashed var(--line)" }}
+          title="Click para editar"
+        >
+          {formatDisplay(value)}
+        </span>
+        {status === "saving" && <span style={{ fontSize: 10, color: "var(--ink-soft)" }}>guardando…</span>}
+        {status === "saved" && <span style={{ fontSize: 10, color: "var(--positive)" }}>✓ guardado</span>}
+        {status === "error" && <span style={{ fontSize: 10, color: "var(--risk)" }}>{error}</span>}
+      </span>
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      type="number"
+      min="0"
+      step="any"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") {
+          setDraft(String(value));
+          setEditing(false);
+        }
+      }}
+      style={{ width, textAlign: "right" }}
+    />
+  );
+}
+
 export function ProductProfitabilityTable({
   rows,
   royaltyPercent,
 }: {
-  rows: { productId: string; productName: string; channelId: string; channelName: string; price: number; cost: number; commissionPercent: number; onlinePaymentFeePercent: number }[];
+  rows: {
+    productId: string;
+    productName: string;
+    channelId: string;
+    channelName: string;
+    price: number;
+    cost: number;
+    commissionPercent: number;
+    onlinePaymentFeePercent: number;
+    discountPercent: number;
+  }[];
   royaltyPercent: number;
 }) {
+  const router = useRouter();
   const [thresholds, setThresholds] = useState(DEFAULT_MARGIN_THRESHOLDS);
   const [editingThresholds, setEditingThresholds] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
@@ -248,19 +345,47 @@ export function ProductProfitabilityTable({
   function formatARS(n: number) {
     return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
   }
+  function formatPct(n: number) {
+    return `${n.toFixed(1)}%`;
+  }
 
   if (rows.length === 0) {
     return <p style={{ color: "var(--ink-soft)" }}>No hay precios por canal cargados todavía -- cargalos en Ventas para que aparezcan acá.</p>;
   }
 
+  async function savePrice(productId: string, channelId: string, newPrice: number) {
+    const res = await fetch("/api/channel-prices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId, channelId, price: newPrice }),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: body?.error?.toString() ?? "No se pudo guardar el precio." };
+    router.refresh();
+    return { ok: true };
+  }
+
+  async function saveDiscount(productId: string, channelId: string, newPercentDisplay: number) {
+    const res = await fetch("/api/product-channel-discount", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId, channelId, percent: newPercentDisplay / 100 }),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, error: body?.error?.toString() ?? "No se pudo guardar el descuento." };
+    router.refresh();
+    return { ok: true };
+  }
+
   // Se calculan una sola vez acá (no adentro del .map de render) para poder
   // ordenar por columnas derivadas (Total obtenido, Rentabilidad, Margen)
   // sin repetir la cuenta.
-  const enrichedRows = rows.map((r) => {
+  const enrichedRows: EnrichedRow[] = rows.map((r) => {
     const commissionAmount = r.price * r.commissionPercent;
     const royaltyAmount = r.price * royaltyPercent;
     const onlinePaymentFeeAmount = r.price * r.onlinePaymentFeePercent;
-    const netObtained = r.price - commissionAmount - royaltyAmount - onlinePaymentFeeAmount;
+    const discountAmount = r.price * r.discountPercent;
+    const netObtained = r.price - commissionAmount - royaltyAmount - onlinePaymentFeeAmount - discountAmount;
     const profitability = r.cost > 0 ? netObtained / r.cost : null;
     // Igual que profitability: sin costo cargado no hay margen real que
     // mostrar. Antes esto daba (netObtenido - 0) / netObtenido = 100%,
@@ -268,7 +393,7 @@ export function ProductProfitabilityTable({
     // si fuera una alerta real, mezclando "no hay dato" con "revisar
     // esto".
     const margin = r.cost > 0 && netObtained > 0 ? (netObtained - r.cost) / netObtained : null;
-    return { ...r, commissionAmount, royaltyAmount, onlinePaymentFeeAmount, netObtained, profitability, margin };
+    return { ...r, commissionAmount, royaltyAmount, onlinePaymentFeeAmount, discountAmount, netObtained, profitability, margin };
   });
 
   const sortedRows = sort ? sortRows(enrichedRows, sort.key, sort.dir) : enrichedRows;
@@ -300,6 +425,7 @@ export function ProductProfitabilityTable({
       <div className="row" style={{ alignItems: "center", fontSize: 12, color: "var(--ink-soft)" }}>
         <span>
           🔴 Margen &lt; {thresholds.red}% · 🟡 {thresholds.red}–{thresholds.yellow}% o &gt; {thresholds.warning}% (revisar costo/receta) · 🟢 saludable
+          {" · "}Precio y Descuento son editables -- click sobre el valor.
         </span>
         <button className="btn btn-secondary" type="button" style={{ padding: "2px 8px", fontSize: 12 }} onClick={() => setEditingThresholds((v) => !v)}>
           {editingThresholds ? "Cerrar" : "Ajustar umbrales"}
@@ -359,6 +485,7 @@ export function ProductProfitabilityTable({
             <SortableHeader label="Comisión" sortKey="commissionAmount" />
             <SortableHeader label="Regalía" sortKey="royaltyAmount" />
             <SortableHeader label="Pago en línea" sortKey="onlinePaymentFeeAmount" />
+            <SortableHeader label="Descuento" sortKey="discountAmount" />
             <SortableHeader label="Total obtenido" sortKey="netObtained" />
             <SortableHeader label="Rentabilidad" sortKey="profitability" />
             <SortableHeader label="Margen" sortKey="margin" />
@@ -369,13 +496,27 @@ export function ProductProfitabilityTable({
             <tr key={`${r.productId}-${r.channelId}`} style={{ borderTop: "1px dashed var(--line)" }}>
               <td style={{ padding: "4px 8px" }}>{r.productName}</td>
               <td style={{ padding: "4px 8px", color: "var(--ink-soft)" }}>{r.channelName}</td>
-              <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.price)}</td>
+              <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                <InlineEditableCell
+                  value={r.price}
+                  formatDisplay={formatARS}
+                  onSave={(newPrice) => savePrice(r.productId, r.channelId, newPrice)}
+                />
+              </td>
               <td style={{ padding: "4px 8px", textAlign: "right", color: r.cost === 0 ? "var(--risk)" : undefined }}>
                 {r.cost === 0 ? "sin costo" : formatARS(r.cost)}
               </td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.commissionAmount)}</td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.royaltyAmount)}</td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.onlinePaymentFeeAmount)}</td>
+              <td style={{ padding: "4px 8px", textAlign: "right" }}>
+                <InlineEditableCell
+                  value={r.discountPercent * 100}
+                  width={60}
+                  formatDisplay={formatPct}
+                  onSave={(newPercentDisplay) => saveDiscount(r.productId, r.channelId, newPercentDisplay)}
+                />
+              </td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.netObtained)}</td>
               <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>
                 {r.profitability === null ? "—" : `${(r.profitability * 100).toFixed(1)}%`}

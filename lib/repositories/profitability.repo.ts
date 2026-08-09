@@ -1,12 +1,12 @@
 import { createSupabaseServerClient } from "../supabase/server";
 import type { ProductChannelSalesSummary } from "../../types/domain";
 
-/** Filas de entrada para la calculadora de rentabilidad por producto (precio + costo + comisión + pago en línea, ya cruzados en product_profitability_inputs, 0036/0037). */
+/** Filas de entrada para la calculadora de rentabilidad por producto (precio + costo + comisión + pago en línea + descuento, ya cruzados en product_profitability_inputs, 0036/0037/0041). */
 export async function getProductProfitabilityInputs() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("product_profitability_inputs");
   if (error) throw error;
-  return (data ?? []).map((r: { product_id: string; product_name: string; channel_id: string; channel_name: string; price: number; cost: number; commission_percent: number; online_payment_fee_percent: number }) => ({
+  return (data ?? []).map((r: { product_id: string; product_name: string; channel_id: string; channel_name: string; price: number; cost: number; commission_percent: number; online_payment_fee_percent: number; discount_percent: number }) => ({
     productId: r.product_id,
     productName: r.product_name,
     channelId: r.channel_id,
@@ -15,7 +15,20 @@ export async function getProductProfitabilityInputs() {
     cost: Number(r.cost),
     commissionPercent: Number(r.commission_percent),
     onlinePaymentFeePercent: Number(r.online_payment_fee_percent),
+    discountPercent: Number(r.discount_percent),
   }));
+}
+
+/** Descuento puntual de un producto en un canal (Fase 18) -- a diferencia de comisión/regalía/pago en línea, es por producto x canal, no solo por canal (set_product_channel_discount, 0041). */
+export async function setProductChannelDiscount(input: { productId: string; channelId: string; percent: number }) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("set_product_channel_discount", {
+    p_product_id: input.productId,
+    p_channel_id: input.channelId,
+    p_percent: input.percent,
+  });
+  if (error) throw error;
+  return data;
 }
 
 export async function setChannelOnlinePaymentFee(channelId: string, percent: number) {

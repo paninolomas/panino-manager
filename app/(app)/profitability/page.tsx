@@ -2,12 +2,7 @@ import { listProducts, listChannels } from "../../../lib/repositories/sales.repo
 import { listStockItems } from "../../../lib/repositories/stock.repo";
 import { listLatestMarginSnapshots, getProductProfitabilityInputs, getActiveRoyaltyRate, getCommissionByChannel, getOnlinePaymentFeeByChannel } from "../../../lib/repositories/profitability.repo";
 import { requireSocio } from "../../../lib/auth/session";
-import {
-  rankByMarginPercent,
-  rankByTotalProfit,
-  aggregateProfitByChannel,
-  detectMarginDrops,
-} from "../../../lib/services/profitability-engine";
+import { rankByMarginPercent, detectMarginDrops, calculateProductProfitability } from "../../../lib/services/profitability-engine";
 import type { MarginSnapshot } from "../../../types/domain";
 import {
   ProductCostRow,
@@ -68,9 +63,33 @@ export default async function ProfitabilityPage() {
     : [];
 
   const byMargin = rankByMarginPercent(current);
-  const byProfit = rankByTotalProfit(current);
-  const byChannel = aggregateProfitByChannel(current);
   const alerts = detectMarginDrops({ previous, current, thresholdPoints: MARGIN_DROP_THRESHOLD });
+
+  // "Más ganancia total" y "Por canal" -- a pedido del usuario, dejan de ser
+  // un acumulado de unidades vendidas en un período (margin_snapshots) y
+  // pasan a resumir la calculadora de arriba (product_profitability_inputs):
+  // no depende de haber vendido nada, es "si vendo UNA unidad de cada cosa,
+  // cuál me deja más plata" en vez de "cuánto dejé acumulado hasta ahora".
+  const calculatorResults = profitabilityRows.map((r) => ({
+    ...r,
+    ...calculateProductProfitability({
+      price: r.price,
+      cost: r.cost,
+      commissionPercent: r.commissionPercent,
+      royaltyPercent,
+      onlinePaymentFeePercent: r.onlinePaymentFeePercent,
+      discountPercent: r.discountPercent,
+    }),
+  }));
+
+  const topByNetObtained = [...calculatorResults].sort((a, b) => b.netObtained - a.netObtained).slice(0, 5);
+
+  const netObtainedByChannel: Record<string, { channelName: string; total: number; productCount: number }> = {};
+  for (const r of calculatorResults) {
+    const entry = (netObtainedByChannel[r.channelId] ??= { channelName: r.channelName, total: 0, productCount: 0 });
+    entry.total += r.netObtained;
+    entry.productCount += 1;
+  }
 
   return (
     <div className="stack">
@@ -113,43 +132,46 @@ export default async function ProfitabilityPage() {
       {current.length === 0 ? (
         <section className="card">
           <p style={{ color: "var(--ink-soft)" }}>
-            No hay rentabilidad calculada todavía. Generá un período abajo (necesita ventas
-            registradas y costos/precios cargados).
+            Todavía no generaste ningún período de rentabilidad basado en ventas reales (sección
+            "Recalcular rentabilidad" más abajo). El ranking por margen % de ventas reales
+            aparece acá una vez que lo generes.
           </p>
         </section>
       ) : (
+        <section className="card stack">
+          <div className="label">Mejor margen % (período {latestPeriodEnd})</div>
+          {byMargin.slice(0, 5).map((s) => (
+            <div key={`${s.productId}-${s.channelId}-m`} className="row">
+              <span>
+                {productName(s.productId)} · {channelName(s.channelId)}
+              </span>
+              <span className="figure">{formatPct(s.marginPercent)}</span>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {calculatorResults.length > 0 && (
         <>
           <section className="card stack">
-            <div className="label">Mejor margen % (período {latestPeriodEnd})</div>
-            {byMargin.slice(0, 5).map((s) => (
-              <div key={`${s.productId}-${s.channelId}-m`} className="row">
-                <span>
-                  {productName(s.productId)} · {channelName(s.channelId)}
-                </span>
-                <span className="figure">{formatPct(s.marginPercent)}</span>
-              </div>
-            ))}
-          </section>
-
-          <section className="card stack">
-            <div className="label">Más ganancia total</div>
-            {byProfit.slice(0, 5).map((s) => (
+            <div className="label">Más ganancia total (calculadora, por producto -- no acumulado de ventas)</div>
+            {topByNetObtained.map((s) => (
               <div key={`${s.productId}-${s.channelId}-p`} className="row">
                 <span>
-                  {productName(s.productId)} · {channelName(s.channelId)} ({s.unitsSold} un.)
+                  {s.productName} · {s.channelName}
                 </span>
-                <span className="figure">{formatARS(s.totalProfit)}</span>
+                <span className="figure">{formatARS(s.netObtained)}</span>
               </div>
             ))}
           </section>
 
           <section className="card stack">
-            <div className="label">Por canal</div>
-            {Object.entries(byChannel).map(([channelId, agg]) => (
+            <div className="label">Por canal (calculadora, suma por producto -- no acumulado de ventas)</div>
+            {Object.entries(netObtainedByChannel).map(([channelId, agg]) => (
               <div key={channelId} className="row">
-                <span>{channelName(channelId)}</span>
+                <span>{agg.channelName}</span>
                 <span className="figure">
-                  {formatARS(agg.totalProfit)} ({agg.unitsSold} un.)
+                  {formatARS(agg.total)} ({agg.productCount} prod.)
                 </span>
               </div>
             ))}
