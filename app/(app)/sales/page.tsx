@@ -1,5 +1,5 @@
 import { listChannels, listProducts, listSalesProducts } from "../../../lib/repositories/sales.repo";
-import { listStockItems } from "../../../lib/repositories/stock.repo";
+import { listStockItems, listStockItemCosts } from "../../../lib/repositories/stock.repo";
 import { requireSession } from "../../../lib/auth/session";
 import { NewSaleForm, NewProductForm, ProductsList } from "../../../components/domain/SalesForms";
 
@@ -7,11 +7,16 @@ export default async function SalesPage() {
   const profile = await requireSession();
   // Fase 1.1 item 1: el empleado nunca consulta la tabla products directamente
   // (RLS se lo impide) -- usa la función segura que no expone current_cost.
-  const [channels, products, stockItems] = await Promise.all([
+  const [channels, products, stockItemsRaw, itemCosts] = await Promise.all([
     listChannels(),
     profile.role === "socio" ? listProducts() : listSalesProducts(),
     profile.role === "socio" ? listStockItems() : Promise.resolve([]),
+    profile.role === "socio" ? listStockItemCosts() : Promise.resolve({}),
   ]);
+  // El costo se fusiona acá (no en RecipeEditor) para que el preview en vivo
+  // de la receta funcione desde el primer tipeo, sin depender de que la
+  // receta ya esté guardada -- ver comentario en RecipeEditor.
+  const stockItems = stockItemsRaw.map((i) => ({ ...i, unitCost: itemCosts[i.id] ?? 0 }));
 
   return (
     <div className="stack">

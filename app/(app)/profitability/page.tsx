@@ -1,5 +1,5 @@
 import { listProducts, listChannels } from "../../../lib/repositories/sales.repo";
-import { listStockItems } from "../../../lib/repositories/stock.repo";
+import { listStockItems, listStockItemCosts } from "../../../lib/repositories/stock.repo";
 import { listLatestMarginSnapshots, getProductProfitabilityInputs, getActiveRoyaltyRate, getCommissionByChannel, getOnlinePaymentFeeByChannel } from "../../../lib/repositories/profitability.repo";
 import { requireSocio } from "../../../lib/auth/session";
 import { rankByMarginPercent, detectMarginDrops, calculateProductProfitability } from "../../../lib/services/profitability-engine";
@@ -25,7 +25,7 @@ const MARGIN_DROP_THRESHOLD = 0.02; // 2 puntos porcentuales, mismo umbral que l
 
 export default async function ProfitabilityPage() {
   await requireSocio();
-  const [products, channels, rawSnapshots, stockItems, profitabilityRows, royaltyPercent, commissionByChannel, onlinePaymentFeeByChannel] = await Promise.all([
+  const [products, channels, rawSnapshots, stockItemsRaw, profitabilityRows, royaltyPercent, commissionByChannel, onlinePaymentFeeByChannel, itemCosts] = await Promise.all([
     listProducts(),
     listChannels(),
     listLatestMarginSnapshots(),
@@ -34,7 +34,11 @@ export default async function ProfitabilityPage() {
     getActiveRoyaltyRate(),
     getCommissionByChannel(),
     getOnlinePaymentFeeByChannel(),
+    listStockItemCosts(),
   ]);
+  // Igual que en Ventas: el costo se fusiona acá para que el preview en
+  // vivo de la receta (RecipeEditor) funcione desde el primer tipeo.
+  const stockItems = stockItemsRaw.map((i) => ({ ...i, unitCost: itemCosts[i.id] ?? 0 }));
 
   const productName = (id: string) => products.find((p) => p.id === id)?.name ?? "—";
   const channelName = (id: string) => channels.find((c) => c.id === id)?.name ?? "—";

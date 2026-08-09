@@ -7,7 +7,7 @@ import { toNumber } from "../../lib/client/number";
 
 type Channel = { id: string; name: string };
 type Product = { id: string; name: string };
-type StockItem = { id: string; name: string; unit: string };
+type StockItem = { id: string; name: string; unit: string; unitCost?: number };
 type RecipeLine = { stockItemId: string; stockItemName: string; unit: string; quantity: number; unitCost: number };
 
 /**
@@ -32,8 +32,14 @@ export function RecipeEditor({ productId, stockItems, initialRecipe }: { product
 
   const previewTotal = stockItems.reduce((sum, item) => {
     const qty = toNumber(quantities[item.id]);
-    const line = initialRecipe.find((r) => r.stockItemId === item.id);
-    const unitCost = line?.unitCost ?? 0;
+    // Antes usaba line?.unitCost (de initialRecipe, la receta YA guardada) --
+    // en una receta nueva ningún insumo tiene línea todavía, así que el
+    // costo en vivo daba siempre $0 aunque el insumo ya tuviera costo
+    // cargado en Stock. El costo del insumo viene directo de stockItems
+    // (listStockItemCosts, fusionado del lado del servidor), no de la
+    // receta guardada -- así funciona el preview incluso antes del primer
+    // "Guardar receta".
+    const unitCost = item.unitCost ?? 0;
     return sum + (qty > 0 ? qty * unitCost : 0);
   }, 0);
 
@@ -62,11 +68,14 @@ export function RecipeEditor({ productId, stockItems, initialRecipe }: { product
       {error && <div className="error-banner">{error}</div>}
       {stockItems.length === 0 && <p style={{ color: "var(--ink-soft)" }}>No hay insumos cargados todavía -- creá algunos en Stock primero.</p>}
       {stockItems.map((item) => {
-        const line = initialRecipe.find((r) => r.stockItemId === item.id);
+        const qty = toNumber(quantities[item.id]);
+        const unitCost = item.unitCost ?? 0;
+        const lineTotal = qty > 0 ? qty * unitCost : 0;
         return (
           <div key={item.id} className="row" style={{ alignItems: "center", gap: 8 }}>
             <span style={{ flex: 1 }}>
               {item.name} <span style={{ color: "var(--ink-soft)", fontSize: 12 }}>({item.unit})</span>
+              {unitCost === 0 && <span style={{ color: "var(--risk)", fontSize: 11 }}> · sin costo cargado</span>}
             </span>
             <input
               type="number"
@@ -77,11 +86,9 @@ export function RecipeEditor({ productId, stockItems, initialRecipe }: { product
               onChange={(e) => setQuantities((q) => ({ ...q, [item.id]: e.target.value }))}
               style={{ width: 100 }}
             />
-            {line && (
-              <span style={{ fontSize: 12, color: "var(--ink-soft)", width: 90, textAlign: "right" }}>
-                ${(line.quantity * line.unitCost).toFixed(2)}
-              </span>
-            )}
+            <span style={{ fontSize: 12, color: "var(--ink-soft)", width: 90, textAlign: "right" }}>
+              {qty > 0 ? `$${lineTotal.toFixed(2)}` : ""}
+            </span>
           </div>
         );
       })}

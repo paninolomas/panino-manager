@@ -7,7 +7,7 @@ import { toNumber } from "../../lib/client/number";
 
 type Product = { id: string; name: string };
 type Channel = { id: string; name: string };
-type StockItem = { id: string; name: string; unit: string };
+type StockItem = { id: string; name: string; unit: string; unitCost?: number };
 type RecipeLine = { stockItemId: string; stockItemName: string; unit: string; quantity: number; unitCost: number };
 
 /**
