@@ -33,29 +33,25 @@ export interface ProductProfitabilityInput {
   cost: number;
   commissionPercent: number;
   royaltyPercent: number;
-  /** "Servicio pago en línea" -- cargo del canal distinto de la comisión (Fase 16). 0 si el canal no lo tiene configurado. */
-  onlinePaymentFeePercent: number;
 }
 
 export interface ProductProfitabilityResult {
   commissionAmount: number;
   royaltyAmount: number;
-  onlinePaymentFeeAmount: number;
   netObtained: number;
   /** null si cost=0 -- dividir por cero daría un número que parece preciso sin serlo (mismo criterio que calculateMarginPercent de abajo). */
   profitabilityPercent: number | null;
-  /** Ganancia ÷ precio neto (precio - comisión - regalía - pago en línea) -- distinto de "rentabilidad": nunca pasa de 100%, es la porción de cada venta que es ganancia. null si netObtained<=0 (no tiene sentido "margen sobre precio neto" si ese precio neto no es positivo). */
+  /** Ganancia ÷ precio neto (precio - comisión - regalía) -- distinto de "rentabilidad": nunca pasa de 100%, es la porción de cada venta que es ganancia. null si netObtained<=0 (no tiene sentido "margen sobre precio neto" si ese precio neto no es positivo). */
   marginPercent: number | null;
 }
 
 export function calculateProductProfitability(input: ProductProfitabilityInput): ProductProfitabilityResult {
   const commissionAmount = input.price * input.commissionPercent;
   const royaltyAmount = input.price * input.royaltyPercent;
-  const onlinePaymentFeeAmount = input.price * input.onlinePaymentFeePercent;
-  const netObtained = input.price - commissionAmount - royaltyAmount - onlinePaymentFeeAmount;
+  const netObtained = input.price - commissionAmount - royaltyAmount;
   const profitabilityPercent = input.cost > 0 ? netObtained / input.cost : null;
   const marginPercent = netObtained > 0 ? (netObtained - input.cost) / netObtained : null;
-  return { commissionAmount, royaltyAmount, onlinePaymentFeeAmount, netObtained, profitabilityPercent, marginPercent };
+  return { commissionAmount, royaltyAmount, netObtained, profitabilityPercent, marginPercent };
 }
 
 /** Precio neto = precio realmente cobrado menos la comisión del canal. */

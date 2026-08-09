@@ -555,24 +555,6 @@ usuario todavía no decidió si lo va a seguir usando en paralelo.
   reproduce el ejemplo exacto del usuario (Sandwich Milanesa, 169,15%).
 - Tabla nueva en `/profitability`, arriba de todo lo demás.
 
-## Fase 16 — "Servicio pago en línea" como cargo separado del canal (ver migración 0037)
-
-A partir de 4 ejemplos reales de pedidos de PedidosYa que pasó el usuario:
-la comisión real ronda 14-15% (no el 20% del placeholder original ni el
-35% que el usuario tenía anotado en su planilla — ese 35% resultó estar
-mezclando comisión + impuestos + servicio de pago en línea + descuento
-propio del local, cuatro conceptos distintos). "Servicio pago en línea"
-(~2,76%) es un cargo real y separado que la calculadora de Fase 15 no
-contemplaba — se agrega como su propio tipo (`online_payment_fee`) en
-`channel_cost_items`, con su propio setter versionado
-(`set_channel_online_payment_fee`) y su propia columna en la tabla.
-"Impuestos" queda deliberadamente afuera — decisión explícita del usuario,
-varía demasiado pedido a pedido (3,3%-5%) para ser un % fijo confiable; lo
-sigue completando a mano por fuera de la app. "Descuento otorgado por el
-local" tampoco se modela como cargo fijo del canal — es una decisión
-promocional que el usuario controla pedido a pedido, no una tarifa de
-PedidosYa.
-
 ## Qué falta después de Fase 1
 
 Ver el roadmap en los documentos de arquitectura entregados. Fase 2 es el

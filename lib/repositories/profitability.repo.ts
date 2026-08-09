@@ -1,12 +1,12 @@
 import { createSupabaseServerClient } from "../supabase/server";
 import type { ProductChannelSalesSummary } from "../../types/domain";
 
-/** Filas de entrada para la calculadora de rentabilidad por producto (precio + costo + comisión + pago en línea, ya cruzados en product_profitability_inputs, 0036/0037). */
+/** Filas de entrada para la calculadora de rentabilidad por producto (precio + costo + comisión, ya cruzados en product_profitability_inputs, 0036). */
 export async function getProductProfitabilityInputs() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("product_profitability_inputs");
   if (error) throw error;
-  return (data ?? []).map((r: { product_id: string; product_name: string; channel_id: string; channel_name: string; price: number; cost: number; commission_percent: number; online_payment_fee_percent: number }) => ({
+  return (data ?? []).map((r: { product_id: string; product_name: string; channel_id: string; channel_name: string; price: number; cost: number; commission_percent: number }) => ({
     productId: r.product_id,
     productName: r.product_name,
     channelId: r.channel_id,
@@ -14,15 +14,7 @@ export async function getProductProfitabilityInputs() {
     price: Number(r.price),
     cost: Number(r.cost),
     commissionPercent: Number(r.commission_percent),
-    onlinePaymentFeePercent: Number(r.online_payment_fee_percent),
   }));
-}
-
-export async function setChannelOnlinePaymentFee(channelId: string, percent: number) {
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.rpc("set_channel_online_payment_fee", { p_channel_id: channelId, p_percent: percent });
-  if (error) throw error;
-  return data as string;
 }
 
 export async function getActiveRoyaltyRate(): Promise<number> {
@@ -97,18 +89,6 @@ export async function getCommissionByChannel(): Promise<Record<string, number>> 
     .from("channel_cost_items")
     .select("channel_id, value_percent")
     .eq("type", "commission")
-    .is("valid_to", null);
-  if (error) throw error;
-  return Object.fromEntries((data ?? []).map((c) => [c.channel_id, Number(c.value_percent ?? 0)]));
-}
-
-/** "Servicio pago en línea" vigente por canal (Fase 16), para el form de edición -- valores por defecto. */
-export async function getOnlinePaymentFeeByChannel(): Promise<Record<string, number>> {
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("channel_cost_items")
-    .select("channel_id, value_percent")
-    .eq("type", "online_payment_fee")
     .is("valid_to", null);
   if (error) throw error;
   return Object.fromEntries((data ?? []).map((c) => [c.channel_id, Number(c.value_percent ?? 0)]));
