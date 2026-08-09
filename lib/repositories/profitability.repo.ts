@@ -1,8 +1,20 @@
 import { createSupabaseServerClient } from "../supabase/server";
 import type { ProductChannelSalesSummary } from "../../types/domain";
 
+export type ProductProfitabilityInputRow = {
+  productId: string;
+  productName: string;
+  channelId: string;
+  channelName: string;
+  price: number;
+  cost: number;
+  commissionPercent: number;
+  onlinePaymentFeePercent: number;
+  discountPercent: number;
+};
+
 /** Filas de entrada para la calculadora de rentabilidad por producto (precio + costo + comisión + pago en línea + descuento, ya cruzados en product_profitability_inputs, 0036/0037/0041). */
-export async function getProductProfitabilityInputs() {
+export async function getProductProfitabilityInputs(): Promise<ProductProfitabilityInputRow[]> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("product_profitability_inputs");
   if (error) throw error;

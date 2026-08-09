@@ -11,7 +11,7 @@ export default async function SalesPage() {
     listChannels(),
     profile.role === "socio" ? listProducts() : listSalesProducts(),
     profile.role === "socio" ? listStockItems() : Promise.resolve([]),
-    profile.role === "socio" ? listStockItemCosts() : Promise.resolve({}),
+    profile.role === "socio" ? listStockItemCosts() : Promise.resolve({} as Record<string, number>),
   ]);
   // El costo se fusiona acá (no en RecipeEditor) para que el preview en vivo
   // de la receta funcione desde el primer tipeo, sin depender de que la
