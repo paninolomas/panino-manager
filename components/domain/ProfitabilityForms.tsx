@@ -320,6 +320,7 @@ type SortKey =
   | "onlinePaymentFeeAmount"
   | "discountAmount"
   | "netObtained"
+  | "netProfit"
   | "profitability"
   | "margin";
 
@@ -337,6 +338,8 @@ type EnrichedRow = {
   onlinePaymentFeeAmount: number;
   discountAmount: number;
   netObtained: number;
+  /** Ganancia real en pesos = netObtained (lo cobrado neto del canal) menos el costo del insumo. A diferencia de netObtained, ESTE número sí resta el costo -- Rentabilidad/Margen son la misma resta expresada en %. */
+  netProfit: number;
   profitability: number | null;
   margin: number | null;
 };
@@ -613,7 +616,11 @@ export function ProductProfitabilityTable({
     // como "Margen") -- es el número que se usa en el rubro para hablar de
     // "cómo está armada la receta", independiente de qué canal la vende.
     const foodCostPercent = r.price > 0 && r.cost > 0 ? r.cost / r.price : null;
-    return { ...r, commissionAmount, royaltyAmount, onlinePaymentFeeAmount, discountAmount, netObtained, profitability, margin, foodCostPercent };
+    // Ganancia real en $ -- Total obtenido (lo cobrado neto del canal)
+    // menos el costo del insumo. netObtained por sí solo NO resta esto,
+    // por eso la gente confunde "Total obtenido" con "ganancia".
+    const netProfit = netObtained - r.cost;
+    return { ...r, commissionAmount, royaltyAmount, onlinePaymentFeeAmount, discountAmount, netObtained, netProfit, profitability, margin, foodCostPercent };
   });
 
   const sortedRows = sort ? sortRows(enrichedRows, sort.key, sort.dir) : enrichedRows;
@@ -712,6 +719,7 @@ export function ProductProfitabilityTable({
             <SortableHeader label="Pago en línea" sortKey="onlinePaymentFeeAmount" />
             <SortableHeader label="Descuento" sortKey="discountAmount" />
             <SortableHeader label="Total obtenido" sortKey="netObtained" />
+            <SortableHeader label="Ganancia real" sortKey="netProfit" />
             <SortableHeader label="Rentabilidad" sortKey="profitability" />
             <SortableHeader label="Margen" sortKey="margin" />
             <th style={{ padding: "4px 8px" }}></th>
@@ -747,6 +755,9 @@ export function ProductProfitabilityTable({
                 />
               </td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.netObtained)}</td>
+              <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600, color: r.cost > 0 && r.netProfit < 0 ? "var(--risk)" : undefined }}>
+                {r.cost === 0 ? "—" : formatARS(r.netProfit)}
+              </td>
               <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>
                 {r.profitability === null ? "—" : `${(r.profitability * 100).toFixed(1)}%`}
               </td>
