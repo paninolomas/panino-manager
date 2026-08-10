@@ -193,11 +193,21 @@ export function ChannelOnlinePaymentFeeForm({ channel }: { channel: Channel & { 
  * calculateProductProfitability (profitability-engine.ts), esto solo arma
  * las filas.
  *
- * Umbrales de referencia del semáforo de Margen -- referencia general de
- * gastronomía (food cost 28-35% ≈ margen 65%+ saludable), NO un estándar
- * exacto para este negocio, por eso son editables acá mismo (estado local,
- * no persistido -- son un criterio visual de lectura rápida, no un dato de
- * negocio que necesite versionado ni auditoría).
+ * Umbrales de referencia del semáforo de Margen -- alineados a benchmarks
+ * de food cost de gastronomía argentina 2026 (28-35% en restaurante con
+ * salón, 22-28% en delivery/fast casual, >40% señal de alarma), pero
+ * TRADUCIDOS a la métrica de esta tabla: acá "Margen" se calcula sobre el
+ * Total obtenido NETO (ya descontada la comisión del canal + regalía +
+ * pago en línea), no sobre el precio de venta bruto como el food cost
+ * tradicional. Con la estructura real de PedidosYa (~21% entre comisión,
+ * regalía y pago en línea), un food cost de 40% (alarma) equivale a ~49%
+ * de este Margen, y el techo ideal de delivery (28% food cost) equivale a
+ * ~64,5% -- de ahí salen los defaults de abajo (50/65), no son un número
+ * general de "gastronomía" sin ajustar. Igual quedan editables acá mismo
+ * (estado local, no persistido) porque la traducción exacta depende de la
+ * comisión de CADA canal -- en un canal con menos comisión (ej. mostrador
+ * sin delivery), el mismo food cost da un Margen más alto, así que estos
+ * umbrales leen más "generoso" para pedidos sin intermediario.
  */
 const DEFAULT_MARGIN_THRESHOLDS = { red: 50, yellow: 65, warning: 90 };
 
@@ -259,6 +269,22 @@ function marginColor(marginPercent: number | null, thresholds: { red: number; ye
   if (pct < thresholds.yellow) return "var(--warning)";
   if (pct > thresholds.warning) return "var(--warning)"; // margen sospechosamente alto -- probable costo/receta sin cargar
   return "var(--positive)";
+}
+
+/**
+ * Traduce un % de Margen (sobre Total obtenido neto) a su food cost
+ * equivalente (sobre precio bruto) -- para mostrar en la leyenda el
+ * benchmark que la gente del rubro conoce ("food cost"), no solo el
+ * número interno de la tabla. Usa como referencia el descuento típico de
+ * PedidosYa (~21,11% entre comisión 14,35% + regalía 4% + pago en línea
+ * 2,76%) porque es el canal real de este negocio -- en un canal con menos
+ * comisión (mostrador, sin intermediario) el mismo Margen corresponde a
+ * un food cost más alto de lo que dice acá, por eso es una referencia,
+ * no un valor exacto por fila.
+ */
+const TYPICAL_CHANNEL_DEDUCTION = 0.2111;
+function marginToFoodCostEquivalent(marginPercent: number) {
+  return (1 - marginPercent / 100) * (1 - TYPICAL_CHANNEL_DEDUCTION) * 100;
 }
 
 /**
@@ -498,7 +524,11 @@ export function ProductProfitabilityTable({
       <div className="full-bleed-inner stack">
       <div className="row" style={{ alignItems: "center", fontSize: 12, color: "var(--ink-soft)" }}>
         <span>
-          🔴 Margen &lt; {thresholds.red}% · 🟡 {thresholds.red}–{thresholds.yellow}% o &gt; {thresholds.warning}% (revisar costo/receta) · 🟢 saludable
+          🔴 Margen &lt; {thresholds.red}% (≈ food cost &gt;{marginToFoodCostEquivalent(thresholds.red).toFixed(0)}%, alarma) · 🟡{" "}
+          {thresholds.red}–{thresholds.yellow}% (≈ food cost {marginToFoodCostEquivalent(thresholds.yellow).toFixed(0)}–
+          {marginToFoodCostEquivalent(thresholds.red).toFixed(0)}%) o &gt; {thresholds.warning}% (revisar costo/receta) · 🟢 &gt;{thresholds.yellow}%
+          (≈ food cost &lt;{marginToFoodCostEquivalent(thresholds.yellow).toFixed(0)}%, ideal delivery AR 2026)
+          {" · "}equivalencia sobre PedidosYa, otros canales varían.
           {" · "}Precio y Descuento son editables -- click sobre el valor.
         </span>
         <button className="btn btn-secondary" type="button" style={{ padding: "2px 8px", fontSize: 12 }} onClick={() => setEditingThresholds((v) => !v)}>
