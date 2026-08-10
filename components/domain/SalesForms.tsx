@@ -23,12 +23,15 @@ export function RecipeEditor({
   stockItems,
   initialRecipe,
   onSaved,
+  otherProducts,
 }: {
   productId: string;
   stockItems: StockItem[];
   initialRecipe: RecipeLine[];
   /** Se llama después de un guardado exitoso -- el que lo pasa (ProductCostRow, ProductsList) debe usarlo para RE-PEDIR la receta guardada al servidor, no solo para avisar. Sin esto, la próxima vez que se abre "Receta" (cerrás y volvés a abrir, o cambiás de pantalla y volvés) se sigue mostrando el `initialRecipe` viejo que quedó en el estado del padre desde el primer fetch -- que si la primera vez que abriste la receta estaba vacía, se queda vacía para siempre aunque ya hayas guardado después. */
   onSaved?: () => void | Promise<void>;
+  /** Catálogo de productos para copiar su receta como punto de partida (combos: "Combo X" = Milanesa + Papas, sin re-tipear cada insumo). Opcional -- si no se pasa, no se muestra el selector. Excluye al propio productId en el caller. */
+  otherProducts?: Product[];
 }) {
   const router = useRouter();
   const initialQuantities: Record<string, string> = {};
@@ -40,6 +43,44 @@ export function RecipeEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedCost, setSavedCost] = useState<number | null>(null);
+  const [copyFromId, setCopyFromId] = useState(otherProducts?.[0]?.id ?? "");
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
+
+  /**
+   * Copia (suma) los insumos de otro producto ya cargado al borrador actual
+   * -- para armar un combo ("Combo X" = Milanesa + Papas) sin re-tipear
+   * cada insumo. Es una copia puntual, no un vínculo: una vez que tocás
+   * "Guardar receta" queda 100% independiente -- si después cambiás la
+   * receta de la Milanesa sola, el combo NO se entera (decisión confirmada
+   * con el usuario).
+   */
+  async function copyFrom() {
+    if (!copyFromId) return;
+    setCopyLoading(true);
+    setCopyMessage(null);
+    const res = await fetch(`/api/sales/products/${copyFromId}/recipe`);
+    setCopyLoading(false);
+    if (!res.ok) {
+      setCopyMessage("No se pudo leer la receta de ese producto.");
+      return;
+    }
+    const lines: RecipeLine[] = await res.json();
+    if (lines.length === 0) {
+      setCopyMessage("Ese producto no tiene receta cargada todavía.");
+      return;
+    }
+    setQuantities((prev) => {
+      const next = { ...prev };
+      for (const line of lines) {
+        const existing = toNumber(next[line.stockItemId]) || 0;
+        next[line.stockItemId] = String(existing + line.quantity);
+      }
+      return next;
+    });
+    const productName = otherProducts?.find((p) => p.id === copyFromId)?.name ?? "producto";
+    setCopyMessage(`Se sumaron ${lines.length} insumo${lines.length === 1 ? "" : "s"} de "${productName}". Revisá las cantidades antes de guardar.`);
+  }
 
   const previewTotal = stockItems.reduce((sum, item) => {
     const qty = toNumber(quantities[item.id]);
@@ -78,6 +119,22 @@ export function RecipeEditor({
   return (
     <div className="stack" style={{ paddingLeft: 12, borderLeft: "2px solid var(--line)" }}>
       {error && <div className="error-banner">{error}</div>}
+      {otherProducts && otherProducts.length > 0 && (
+        <div className="row" style={{ gap: 8, alignItems: "center", fontSize: 13, paddingBottom: 4, borderBottom: "1px dashed var(--line)" }}>
+          <span style={{ color: "var(--ink-soft)" }}>Copiar ingredientes de</span>
+          <select value={copyFromId} onChange={(e) => setCopyFromId(e.target.value)} style={{ flex: 1 }}>
+            {otherProducts.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button className="btn btn-secondary" type="button" disabled={copyLoading} onClick={copyFrom} style={{ padding: "4px 10px", fontSize: 13 }}>
+            {copyLoading ? "…" : "Agregar"}
+          </button>
+        </div>
+      )}
+      {copyMessage && <p style={{ fontSize: 12, color: "var(--ink-soft)" }}>{copyMessage}</p>}
       {stockItems.length === 0 && <p style={{ color: "var(--ink-soft)" }}>No hay insumos cargados todavía -- creá algunos en Stock primero.</p>}
       {stockItems.map((item) => {
         const qty = toNumber(quantities[item.id]);
@@ -240,7 +297,13 @@ export function ProductsList({ products, channels, stockItems }: { products: { i
             (recipeLoading === p.id ? (
               <p style={{ color: "var(--ink-soft)", paddingLeft: 12 }}>Cargando…</p>
             ) : (
-              <RecipeEditor productId={p.id} stockItems={stockItems} initialRecipe={recipesByProduct[p.id] ?? []} onSaved={() => loadRecipe(p.id)} />
+              <RecipeEditor
+                productId={p.id}
+                stockItems={stockItems}
+                initialRecipe={recipesByProduct[p.id] ?? []}
+                onSaved={() => loadRecipe(p.id)}
+                otherProducts={products.filter((other) => other.id !== p.id)}
+              />
             ))}
           {priceFormId === p.id && (
             <div className="row" style={{ gap: 8, paddingLeft: 12 }}>

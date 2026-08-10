@@ -9,6 +9,7 @@ import {
   rankByTotalProfit,
   aggregateProfitByChannel,
   detectMarginDrops,
+  calculateRequiredRevenue,
 } from "../../lib/services/profitability-engine";
 import type { ProductChannelSalesSummary, MarginSnapshot } from "../../types/domain";
 
@@ -185,5 +186,21 @@ describe("detectMarginDrops", () => {
       { productId: "lomito", channelId: "mostrador", unitsSold: 10, unitPrice: 17000, unitCost: 10200, unitProfit: 6800, marginPercent: 0.342, totalProfit: 68000, totalContribution: 68000 },
     ];
     expect(detectMarginDrops({ previous, current, thresholdPoints: 0.02 })).toHaveLength(0);
+  });
+});
+
+describe("calculateRequiredRevenue", () => {
+  it("divide los gastos totales por el margen de contribución promedio", () => {
+    // Gastos $3.000.000, margen de contribución promedio 40% -> hace falta facturar $7.500.000
+    expect(calculateRequiredRevenue(3000000, 0.4)).toBeCloseTo(7500000, 0);
+  });
+
+  it("margen de contribución promedio <= 0 devuelve null -- ningún volumen de venta cubre los gastos", () => {
+    expect(calculateRequiredRevenue(3000000, 0)).toBeNull();
+    expect(calculateRequiredRevenue(3000000, -0.05)).toBeNull();
+  });
+
+  it("sin gastos, la facturación necesaria es 0 (con margen positivo)", () => {
+    expect(calculateRequiredRevenue(0, 0.4)).toBe(0);
   });
 });

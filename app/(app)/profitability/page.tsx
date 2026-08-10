@@ -1,8 +1,9 @@
 import { listProducts, listChannels } from "../../../lib/repositories/sales.repo";
 import { listStockItems, listStockItemCosts } from "../../../lib/repositories/stock.repo";
 import { listLatestMarginSnapshots, getProductProfitabilityInputs, getActiveRoyaltyRate, getCommissionByChannel, getOnlinePaymentFeeByChannel } from "../../../lib/repositories/profitability.repo";
+import { listExpenses } from "../../../lib/repositories/expenses.repo";
 import { requireSocio } from "../../../lib/auth/session";
-import { detectMarginDrops, calculateProductProfitability } from "../../../lib/services/profitability-engine";
+import { detectMarginDrops, calculateProductProfitability, calculateRequiredRevenue } from "../../../lib/services/profitability-engine";
 import type { MarginSnapshot } from "../../../types/domain";
 import {
   ProductCostRow,
@@ -12,6 +13,7 @@ import {
   RoyaltyRateForm,
   ChannelCommissionForm,
   ChannelOnlinePaymentFeeForm,
+  NewProductWithPriceForm,
 } from "../../../components/domain/ProfitabilityForms";
 
 function formatARS(n: number) {
@@ -25,7 +27,7 @@ const MARGIN_DROP_THRESHOLD = 0.02; // 2 puntos porcentuales, mismo umbral que l
 
 export default async function ProfitabilityPage() {
   await requireSocio();
-  const [products, channels, rawSnapshots, stockItemsRaw, profitabilityRows, royaltyPercent, commissionByChannel, onlinePaymentFeeByChannel, itemCosts] = await Promise.all([
+  const [products, channels, rawSnapshots, stockItemsRaw, profitabilityRows, royaltyPercent, commissionByChannel, onlinePaymentFeeByChannel, itemCosts, expenses] = await Promise.all([
     listProducts(),
     listChannels(),
     listLatestMarginSnapshots(),
@@ -35,6 +37,7 @@ export default async function ProfitabilityPage() {
     getCommissionByChannel(),
     getOnlinePaymentFeeByChannel(),
     listStockItemCosts(),
+    listExpenses(),
   ]);
   // Igual que en Ventas: el costo se fusiona acá para que el preview en
   // vivo de la receta (RecipeEditor) funcione desde el primer tipeo.
@@ -103,9 +106,42 @@ export default async function ProfitabilityPage() {
     entry.productCount += 1;
   }
 
+  // "¿Necesito vender más para tener utilidades?" -- gastos de TODO lo
+  // cargado en el mes actual (todos los estados, tal cual confirmó el
+  // usuario, sin distinguir fijo/variable) contra el margen de
+  // contribución PROMEDIO del mix de productos. Es una aproximación de
+  // referencia (promedio simple, no pesado por volumen real de venta),
+  // documentado en el comentario de calculateRequiredRevenue.
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const monthEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const monthEnd = monthEndDate.toISOString().slice(0, 10);
+  const monthLabel = now.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+
+  const expensesThisMonth = (expenses ?? []).filter((e) => e.date >= monthStart && e.date <= monthEnd);
+  const totalExpensesThisMonth = expensesThisMonth.reduce((sum, e) => sum + Number(e.amount), 0);
+
+  const contributionRatios = calculatorResults
+    .filter((r) => r.cost > 0 && r.price > 0)
+    .map((r) => (r.netObtained - r.cost) / r.price);
+  const avgContributionMarginRatio =
+    contributionRatios.length > 0 ? contributionRatios.reduce((a, b) => a + b, 0) / contributionRatios.length : 0;
+
+  const requiredRevenue = calculateRequiredRevenue(totalExpensesThisMonth, avgContributionMarginRatio);
+
   return (
     <div className="stack">
       <h1>Rentabilidad</h1>
+
+      <section className="card stack">
+        <h2 style={{ fontSize: 16 }}>Agregar producto</h2>
+        <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>
+          Crea el producto y, si le cargás precio de una, lo deja visible directo en la tabla de
+          abajo -- sin precio en algún canal, un producto no aparece ahí (sí en "Costo actual por
+          producto", más abajo).
+        </p>
+        <NewProductWithPriceForm channels={channels} />
+      </section>
 
       <section className="card stack">
         <div className="label">Rentabilidad por producto (calculadora, no depende de ventas)</div>
@@ -182,6 +218,31 @@ export default async function ProfitabilityPage() {
       )}
 
       <section className="card stack">
+        <div className="label">¿Necesito vender más? (gastos de {monthLabel} vs. margen de contribución)</div>
+        <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>
+          Gastos cargados en {monthLabel} ÷ margen de contribución promedio de tus productos
+          (precio − costo − comisión − regalía − pago en línea − descuento, medido sobre el precio
+          de venta). Es un promedio simple entre productos, no pesado por volumen real de venta —
+          si vendés más de los que dejan mejor margen, en la práctica necesitás facturar menos que
+          esto.
+        </p>
+        <div className="row">
+          <span>Gastos cargados en {monthLabel}</span>
+          <span className="figure">{formatARS(totalExpensesThisMonth)}</span>
+        </div>
+        <div className="row">
+          <span>Margen de contribución promedio ({contributionRatios.length} producto{contributionRatios.length === 1 ? "" : "s"} con costo cargado)</span>
+          <span className="figure">{formatPct(avgContributionMarginRatio)}</span>
+        </div>
+        <div className="row" style={{ fontWeight: 600 }}>
+          <span>Facturación necesaria para cubrir {monthLabel}</span>
+          <span className="figure" style={{ color: requiredRevenue === null ? "var(--risk)" : undefined }}>
+            {requiredRevenue === null ? "No alcanza con ningún volumen (margen promedio ≤ 0)" : formatARS(requiredRevenue)}
+          </span>
+        </div>
+      </section>
+
+      <section className="card stack">
         <h2 style={{ fontSize: 16 }}>Recalcular rentabilidad</h2>
         <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>
           Usa las ventas registradas en el período, el costo actual de cada producto y la
@@ -193,7 +254,13 @@ export default async function ProfitabilityPage() {
       <section className="card stack">
         <h2 style={{ fontSize: 16 }}>Costo actual por producto</h2>
         {products.map((p) => (
-          <ProductCostRow key={p.id} product={p} currentCost={Number((p as { current_cost: number }).current_cost)} stockItems={stockItems} />
+          <ProductCostRow
+            key={p.id}
+            product={p}
+            currentCost={Number((p as { current_cost: number }).current_cost)}
+            stockItems={stockItems}
+            allProducts={products}
+          />
         ))}
       </section>
 

@@ -94,6 +94,31 @@ export function calculateBreakEvenUnits(
 }
 
 /**
+ * Facturación total necesaria para cubrir los gastos del período, a partir
+ * del margen de contribución PROMEDIO del mix de productos (contribución =
+ * precio - costo - comisión - regalía - pago en línea - descuento, medida
+ * como % del precio de venta bruto -- no confundir con "Margen" de la
+ * tabla, que se mide sobre el neto post-comisión).
+ *
+ * Es un promedio simple entre los productos, no pesado por volumen real de
+ * venta (no hay tracking de ventas confiable en este momento) -- por eso es
+ * una aproximación de referencia, no una proyección exacta: si vendés más
+ * de los productos con mejor margen que de los de peor margen, en la
+ * práctica necesitás facturar menos que este número, y viceversa.
+ *
+ * Si el margen de contribución promedio es <= 0, ningún volumen de venta
+ * alcanza para cubrir los gastos -- devuelve null en vez de un número
+ * negativo o infinito engañoso, mismo criterio que calculateBreakEvenUnits.
+ */
+export function calculateRequiredRevenue(
+  totalExpenses: number,
+  avgContributionMarginRatio: number
+): number | null {
+  if (avgContributionMarginRatio <= 0) return null;
+  return totalExpenses / avgContributionMarginRatio;
+}
+
+/**
  * Combina un resumen de ventas (unidades + ingreso bruto de un producto en un
  * canal) con el costo actual del producto y la comisión del canal para
  * producir el snapshot de margen de ese producto/canal en el período.

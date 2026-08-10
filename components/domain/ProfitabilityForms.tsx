@@ -15,7 +15,99 @@ type RecipeLine = { stockItemId: string; stockItemName: string; unit: string; qu
  * el mismo RecipeEditor de /sales (Fase 11) -- antes esta pantalla solo
  * tenía el campo de costo plano, sin acceso al desglose por insumo.
  */
-export function ProductCostRow({ product, currentCost, stockItems }: { product: Product; currentCost: number; stockItems: StockItem[] }) {
+/**
+ * Crear un producto Y su precio de canal en un solo paso, pensado para
+ * Rentabilidad -- la tabla de arriba (product_profitability_inputs) hace
+ * INNER JOIN contra channel_prices, así que un producto SIN precio en
+ * ningún canal no aparece ahí (sí aparece en "Costo actual por producto",
+ * que lista todo lo activo sin ese requisito -- de ahí la confusión de
+ * "lo creé y no me impactó arriba"). Con precio en 0 (o el canal vacío)
+ * simplemente no llama a /api/channel-prices y el producto queda creado
+ * pero sigue sin aparecer arriba hasta que se le cargue un precio a mano
+ * más abajo, en "Precios por canal".
+ */
+export function NewProductWithPriceForm({ channels }: { channels: Channel[] }) {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [cost, setCost] = useState("");
+  const [channelId, setChannelId] = useState(channels[0]?.id ?? "");
+  const [price, setPrice] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const res = await fetch("/api/sales/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, currentCost: toNumber(cost) || 0 }),
+    });
+    if (!res.ok) {
+      setLoading(false);
+      setError("No se pudo crear el producto.");
+      return;
+    }
+    const product = await res.json();
+
+    const priceValue = toNumber(price);
+    if (channelId && priceValue > 0) {
+      const priceRes = await fetch("/api/channel-prices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: product.id, channelId, price: priceValue }),
+      });
+      if (!priceRes.ok) {
+        setLoading(false);
+        setError('El producto se creó, pero no se pudo cargar el precio -- cargalo a mano en "Precios por canal" más abajo.');
+        return;
+      }
+    }
+
+    setLoading(false);
+    setName("");
+    setCost("");
+    setPrice("");
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="stack">
+      {error && <div className="error-banner">{error}</div>}
+      <div className="field">
+        <label>Nombre</label>
+        <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej: Combo rápido" />
+      </div>
+      <div className="field">
+        <label>Costo inicial (opcional -- lo puede reemplazar la Receta después)</label>
+        <input type="number" min="0" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} />
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <div className="field" style={{ flex: 1 }}>
+          <label>Canal</label>
+          <select value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field" style={{ flex: 1 }}>
+          <label>Precio en ese canal</label>
+          <input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Sin esto no aparece arriba en la tabla" />
+        </div>
+      </div>
+      <button className="btn" type="submit" disabled={loading}>
+        {loading ? "Creando…" : "Agregar producto"}
+      </button>
+    </form>
+  );
+}
+
+export function ProductCostRow({ product, currentCost, stockItems, allProducts }: { product: Product; currentCost: number; stockItems: StockItem[]; allProducts: Product[] }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [recipe, setRecipe] = useState<RecipeLine[] | null>(null);
@@ -53,7 +145,13 @@ export function ProductCostRow({ product, currentCost, stockItems }: { product: 
         (loading ? (
           <p style={{ color: "var(--ink-soft)", paddingLeft: 12 }}>Cargando…</p>
         ) : (
-          <RecipeEditor productId={product.id} stockItems={stockItems} initialRecipe={recipe ?? []} onSaved={loadRecipe} />
+          <RecipeEditor
+            productId={product.id}
+            stockItems={stockItems}
+            initialRecipe={recipe ?? []}
+            onSaved={loadRecipe}
+            otherProducts={allProducts.filter((p) => p.id !== product.id)}
+          />
         ))}
     </div>
   );
@@ -216,6 +314,7 @@ type SortKey =
   | "channelName"
   | "price"
   | "cost"
+  | "foodCostPercent"
   | "commissionAmount"
   | "royaltyAmount"
   | "onlinePaymentFeeAmount"
@@ -232,6 +331,7 @@ type EnrichedRow = {
   price: number;
   cost: number;
   discountPercent: number;
+  foodCostPercent: number | null;
   commissionAmount: number;
   royaltyAmount: number;
   onlinePaymentFeeAmount: number;
@@ -285,6 +385,22 @@ function marginColor(marginPercent: number | null, thresholds: { red: number; ye
 const TYPICAL_CHANNEL_DEDUCTION = 0.2111;
 function marginToFoodCostEquivalent(marginPercent: number) {
   return (1 - marginPercent / 100) * (1 - TYPICAL_CHANNEL_DEDUCTION) * 100;
+}
+
+/**
+ * Color directo para la columna "Food cost" -- mismos cortes investigados
+ * (Argentina 2026): <=30% saludable/ideal, 30-40% aceptable pero para
+ * vigilar, >40% alarma (la operación deja de ser rentable salvo ticket
+ * promedio muy alto). A diferencia de marginColor, este no depende de los
+ * umbrales editables del semáforo de Margen -- son dos lecturas distintas
+ * del mismo costo (una sobre precio bruto, otra sobre neto post-comisión).
+ */
+function foodCostColor(foodCostPercent: number | null) {
+  if (foodCostPercent === null) return undefined;
+  const pct = foodCostPercent * 100;
+  if (pct > 40) return "var(--risk)";
+  if (pct > 30) return "var(--warning)";
+  return "var(--positive)";
 }
 
 /**
@@ -493,7 +609,11 @@ export function ProductProfitabilityTable({
     // si fuera una alerta real, mezclando "no hay dato" con "revisar
     // esto".
     const margin = r.cost > 0 && netObtained > 0 ? (netObtained - r.cost) / netObtained : null;
-    return { ...r, commissionAmount, royaltyAmount, onlinePaymentFeeAmount, discountAmount, netObtained, profitability, margin };
+    // Food cost = costo / precio de venta BRUTO (no el neto post-comisión
+    // como "Margen") -- es el número que se usa en el rubro para hablar de
+    // "cómo está armada la receta", independiente de qué canal la vende.
+    const foodCostPercent = r.price > 0 && r.cost > 0 ? r.cost / r.price : null;
+    return { ...r, commissionAmount, royaltyAmount, onlinePaymentFeeAmount, discountAmount, netObtained, profitability, margin, foodCostPercent };
   });
 
   const sortedRows = sort ? sortRows(enrichedRows, sort.key, sort.dir) : enrichedRows;
@@ -586,6 +706,7 @@ export function ProductProfitabilityTable({
             <SortableHeader label="Canal" sortKey="channelName" align="left" />
             <SortableHeader label="Precio" sortKey="price" />
             <SortableHeader label="Costo" sortKey="cost" />
+            <SortableHeader label="Food cost" sortKey="foodCostPercent" />
             <SortableHeader label="Comisión" sortKey="commissionAmount" />
             <SortableHeader label="Regalía" sortKey="royaltyAmount" />
             <SortableHeader label="Pago en línea" sortKey="onlinePaymentFeeAmount" />
@@ -610,6 +731,9 @@ export function ProductProfitabilityTable({
               </td>
               <td style={{ padding: "4px 8px", textAlign: "right", color: r.cost === 0 ? "var(--risk)" : undefined }}>
                 {r.cost === 0 ? "sin costo" : formatARS(r.cost)}
+              </td>
+              <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600, color: foodCostColor(r.foodCostPercent) }}>
+                {r.foodCostPercent === null ? "—" : `${(r.foodCostPercent * 100).toFixed(1)}%`}
               </td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.commissionAmount)}</td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.royaltyAmount)}</td>
