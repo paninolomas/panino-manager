@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RecipeEditor } from "./SalesForms";
 import { toNumber } from "../../lib/client/number";
@@ -66,6 +66,13 @@ export function RoyaltyRateForm({ current }: { current: number }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Mismo motivo que en EditProductCostForm: useState(current) solo corre
+  // al montar, sin esto el recuadro queda desincronizado si el dato
+  // cambia por otra vía y el componente no se remonta.
+  useEffect(() => {
+    setPercent(String(current * 100));
+  }, [current]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -104,6 +111,10 @@ export function ChannelCommissionForm({ channel }: { channel: Channel & { commis
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setPercent(String(channel.commissionPercent * 100));
+  }, [channel.commissionPercent]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -140,6 +151,10 @@ export function ChannelOnlinePaymentFeeForm({ channel }: { channel: Channel & { 
   const [percent, setPercent] = useState(String(channel.onlinePaymentFeePercent * 100));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPercent(String(channel.onlinePaymentFeePercent * 100));
+  }, [channel.onlinePaymentFeePercent]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -602,6 +617,19 @@ export function EditProductCostForm({ product, currentCost }: { product: Product
   const [cost, setCost] = useState(String(currentCost));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // useState(currentCost) solo toma el valor de currentCost UNA VEZ, al
+  // montar el componente -- si guardás la receta y products.current_cost
+  // se recalcula del lado del servidor, router.refresh() manda un
+  // currentCost nuevo como prop, pero como este input sigue siendo la
+  // MISMA instancia de componente (mismo lugar en el árbol), React no
+  // vuelve a correr el useState inicial y el recuadro se queda mostrando
+  // el número viejo para siempre. Este efecto sincroniza el estado local
+  // cada vez que cambia el costo real, así el recuadro refleja lo que
+  // acabás de guardar en la receta sin tener que recargar la página.
+  useEffect(() => {
+    setCost(String(currentCost));
+  }, [currentCost]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
