@@ -756,15 +756,15 @@ export function ProductProfitabilityTable({
         r.channelName,
         r.price,
         r.cost,
-        r.foodCostPercent === null ? "" : (r.foodCostPercent * 100).toFixed(1),
+        r.foodCostPercent === null ? "" : Math.round(r.foodCostPercent * 1000) / 10,
         r.commissionAmount,
         r.royaltyAmount,
         r.onlinePaymentFeeAmount,
-        (r.discountPercent * 100).toFixed(1),
+        Math.round(r.discountPercent * 1000) / 10,
         r.netObtained,
         r.cost === 0 ? "" : r.netProfit,
-        r.profitability === null ? "" : (r.profitability * 100).toFixed(1),
-        r.margin === null ? "" : (r.margin * 100).toFixed(1),
+        r.profitability === null ? "" : Math.round(r.profitability * 1000) / 10,
+        r.margin === null ? "" : Math.round(r.margin * 1000) / 10,
       ])
     );
   }
