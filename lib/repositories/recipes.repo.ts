@@ -60,6 +60,39 @@ export async function getProductRecipe(productId: string): Promise<RecipeLine[]>
 }
 
 /**
+ * Todas las recetas de todos los productos activos, aplanadas en filas
+ * (una por producto x insumo), para el export de "Recetas" -- no hay un
+ * solo RPC para esto (product_recipe_with_costs es por producto), así que
+ * se arma en TS con un Promise.all. N+1 queries, pero es un botón de
+ * exportar que se toca ocasionalmente, no un endpoint de carga de página.
+ */
+export async function getAllRecipesForExport(): Promise<
+  { productId: string; productName: string; stockItemId: string; stockItemName: string; unit: string; quantity: number; unitCost: number; lineCost: number }[]
+> {
+  const supabase = await createSupabaseServerClient();
+  const { data: products, error } = await supabase.from("products").select("id, name").eq("active", true).order("name");
+  if (error) throw error;
+
+  const rows: { productId: string; productName: string; stockItemId: string; stockItemName: string; unit: string; quantity: number; unitCost: number; lineCost: number }[] = [];
+  const recipesPerProduct = await Promise.all((products ?? []).map((p) => getProductRecipe(p.id)));
+  (products ?? []).forEach((p, i) => {
+    for (const line of recipesPerProduct[i]) {
+      rows.push({
+        productId: p.id,
+        productName: p.name,
+        stockItemId: line.stockItemId,
+        stockItemName: line.stockItemName,
+        unit: line.unit,
+        quantity: line.quantity,
+        unitCost: line.unitCost,
+        lineCost: line.quantity * line.unitCost,
+      });
+    }
+  });
+  return rows;
+}
+
+/**
  * Reemplaza la receta completa de un producto de una sola vez -- la UI manda
  * la plantilla entera (todos los insumos del catálogo, con la cantidad que
  * el usuario cargó en cada uno; 0 o vacío = no aplica a este producto) en

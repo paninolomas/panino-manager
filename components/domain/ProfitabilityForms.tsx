@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RecipeEditor } from "./SalesForms";
 import { toNumber } from "../../lib/client/number";
+import { downloadCsv } from "../../lib/client/csv";
 
 type Product = { id: string; name: string };
 type Channel = { id: string; name: string };
@@ -104,6 +105,113 @@ export function NewProductWithPriceForm({ channels }: { channels: Channel[] }) {
         {loading ? "Creando…" : "Agregar producto"}
       </button>
     </form>
+  );
+}
+
+/**
+ * Exporta TODAS las recetas de TODOS los productos activos en un solo CSV
+ * (una fila por producto x insumo) -- informe separado del de Rentabilidad,
+ * a pedido del usuario ("nada mezclado"). Pide /api/reports/recipes recién
+ * al tocar el botón, no en la carga de la página (son N+1 queries).
+ */
+export function ExportRecipesButton() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleClick() {
+    setLoading(true);
+    setError(null);
+    const res = await fetch("/api/reports/recipes");
+    setLoading(false);
+    if (!res.ok) {
+      setError("No se pudieron exportar las recetas.");
+      return;
+    }
+    const rows: { productName: string; stockItemName: string; unit: string; quantity: number; unitCost: number; lineCost: number }[] = await res.json();
+    if (rows.length === 0) {
+      setError("No hay recetas cargadas todavía.");
+      return;
+    }
+    downloadCsv(
+      `recetas_${new Date().toISOString().slice(0, 10)}.csv`,
+      ["Producto", "Insumo", "Unidad", "Cantidad", "Costo unitario", "Costo de la línea"],
+      rows.map((r) => [r.productName, r.stockItemName, r.unit, r.quantity, r.unitCost, r.lineCost])
+    );
+  }
+
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
+      <button className="btn btn-secondary" type="button" disabled={loading} onClick={handleClick}>
+        {loading ? "Exportando…" : "Exportar recetas (CSV)"}
+      </button>
+      {error && <span style={{ fontSize: 11, color: "var(--risk)" }}>{error}</span>}
+    </span>
+  );
+}
+
+/**
+ * Panel de historial genérico -- sirve tanto para precio y descuento
+ * (product_channel_discounts/channel_prices) como para costo de insumo
+ * (stock_item_costs): las tres tablas ya guardan cada versión con
+ * valid_from/valid_to, esto solo las pide y las muestra. No hay nada que
+ * guardar acá, es de solo lectura.
+ */
+export function HistoryPanel({
+  label,
+  fetchUrl,
+  formatValue,
+}: {
+  label: string;
+  fetchUrl: string;
+  formatValue: (n: number) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [entries, setEntries] = useState<{ value: number; validFrom: string; validTo: string | null }[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (entries === null) {
+      setLoading(true);
+      const res = await fetch(fetchUrl);
+      setLoading(false);
+      if (!res.ok) {
+        setError("No se pudo cargar el historial.");
+        return;
+      }
+      setEntries(await res.json());
+    }
+  }
+
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
+      <button className="btn btn-secondary" type="button" style={{ padding: "2px 6px", fontSize: 11 }} onClick={toggle}>
+        {open ? "Cerrar historial" : "Historial"}
+      </button>
+      {open && (
+        <div style={{ fontSize: 11, border: "1px dashed var(--line)", borderRadius: 6, padding: 6, minWidth: 180 }}>
+          <div style={{ fontWeight: 600, marginBottom: 2 }}>{label}</div>
+          {loading && <span style={{ color: "var(--ink-soft)" }}>Cargando…</span>}
+          {error && <span style={{ color: "var(--risk)" }}>{error}</span>}
+          {entries && entries.length === 0 && <span style={{ color: "var(--ink-soft)" }}>Sin cambios registrados todavía.</span>}
+          {entries &&
+            entries.map((e, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ color: "var(--ink-soft)" }}>
+                  {e.validFrom}
+                  {e.validTo ? ` – ${e.validTo}` : " – hoy"}
+                </span>
+                <span style={{ fontWeight: e.validTo ? 400 : 600 }}>{formatValue(e.value)}</span>
+              </div>
+            ))}
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -625,6 +733,42 @@ export function ProductProfitabilityTable({
 
   const sortedRows = sort ? sortRows(enrichedRows, sort.key, sort.dir) : enrichedRows;
 
+  function exportCsv() {
+    downloadCsv(
+      `rentabilidad_${new Date().toISOString().slice(0, 10)}.csv`,
+      [
+        "Producto",
+        "Canal",
+        "Precio",
+        "Costo",
+        "Food cost %",
+        "Comisión",
+        "Regalía",
+        "Pago en línea",
+        "Descuento %",
+        "Total obtenido",
+        "Ganancia real",
+        "Rentabilidad %",
+        "Margen %",
+      ],
+      sortedRows.map((r) => [
+        r.productName,
+        r.channelName,
+        r.price,
+        r.cost,
+        r.foodCostPercent === null ? "" : (r.foodCostPercent * 100).toFixed(1),
+        r.commissionAmount,
+        r.royaltyAmount,
+        r.onlinePaymentFeeAmount,
+        (r.discountPercent * 100).toFixed(1),
+        r.netObtained,
+        r.cost === 0 ? "" : r.netProfit,
+        r.profitability === null ? "" : (r.profitability * 100).toFixed(1),
+        r.margin === null ? "" : (r.margin * 100).toFixed(1),
+      ])
+    );
+  }
+
   function toggleSort(key: SortKey) {
     setSort((current) => {
       if (current?.key !== key) return { key, dir: "desc" };
@@ -658,6 +802,9 @@ export function ProductProfitabilityTable({
           {" · "}equivalencia sobre PedidosYa, otros canales varían.
           {" · "}Precio y Descuento son editables -- click sobre el valor.
         </span>
+        <button className="btn btn-secondary" type="button" style={{ padding: "2px 8px", fontSize: 12 }} onClick={exportCsv}>
+          Exportar CSV
+        </button>
         <button className="btn btn-secondary" type="button" style={{ padding: "2px 8px", fontSize: 12 }} onClick={() => setEditingThresholds((v) => !v)}>
           {editingThresholds ? "Cerrar" : "Ajustar umbrales"}
         </button>
@@ -731,11 +878,18 @@ export function ProductProfitabilityTable({
               <td style={{ padding: "4px 8px" }}>{r.productName}</td>
               <td style={{ padding: "4px 8px", color: "var(--ink-soft)" }}>{r.channelName}</td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>
-                <InlineEditableCell
-                  value={r.price}
-                  formatDisplay={formatARS}
-                  onSave={(newPrice) => savePrice(r.productId, r.channelId, newPrice)}
-                />
+                <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                  <InlineEditableCell
+                    value={r.price}
+                    formatDisplay={formatARS}
+                    onSave={(newPrice) => savePrice(r.productId, r.channelId, newPrice)}
+                  />
+                  <HistoryPanel
+                    label="Historial de precio"
+                    fetchUrl={`/api/channel-prices/history?productId=${r.productId}&channelId=${r.channelId}`}
+                    formatValue={formatARS}
+                  />
+                </span>
               </td>
               <td style={{ padding: "4px 8px", textAlign: "right", color: r.cost === 0 ? "var(--risk)" : undefined }}>
                 {r.cost === 0 ? "sin costo" : formatARS(r.cost)}
@@ -747,12 +901,19 @@ export function ProductProfitabilityTable({
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.royaltyAmount)}</td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.onlinePaymentFeeAmount)}</td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>
-                <InlineEditableCell
-                  value={r.discountPercent * 100}
-                  width={60}
-                  formatDisplay={formatPct}
-                  onSave={(newPercentDisplay) => saveDiscount(r.productId, r.channelId, newPercentDisplay)}
-                />
+                <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                  <InlineEditableCell
+                    value={r.discountPercent * 100}
+                    width={60}
+                    formatDisplay={formatPct}
+                    onSave={(newPercentDisplay) => saveDiscount(r.productId, r.channelId, newPercentDisplay)}
+                  />
+                  <HistoryPanel
+                    label="Historial de descuento"
+                    fetchUrl={`/api/product-channel-discount/history?productId=${r.productId}&channelId=${r.channelId}`}
+                    formatValue={(n) => formatPct(n * 100)}
+                  />
+                </span>
               </td>
               <td style={{ padding: "4px 8px", textAlign: "right" }}>{formatARS(r.netObtained)}</td>
               <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600, color: r.cost > 0 && r.netProfit < 0 ? "var(--risk)" : undefined }}>

@@ -20,6 +20,18 @@ export async function listStockItemCosts(): Promise<Record<string, number>> {
   return Object.fromEntries((data ?? []).map((c) => [c.stock_item_id, Number(c.unit_cost)]));
 }
 
+/** Historial de costo de un insumo -- stock_item_costs ya guarda cada versión (set_stock_item_cost, 0039, cierra sola la vigente al cargar una nueva), esto solo lee lo que ya está. */
+export async function getStockItemCostHistory(stockItemId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("stock_item_costs")
+    .select("unit_cost, valid_from, valid_to")
+    .eq("stock_item_id", stockItemId)
+    .order("valid_from", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ value: Number(r.unit_cost), validFrom: r.valid_from as string, validTo: r.valid_to as string | null }));
+}
+
 export async function updateStockItem(
   stockItemId: string,
   input: { name?: string; unit?: string; minStock?: number; safetyStock?: number; active?: boolean }

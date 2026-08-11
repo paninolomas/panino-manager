@@ -14,6 +14,7 @@ import {
   ChannelCommissionForm,
   ChannelOnlinePaymentFeeForm,
   NewProductWithPriceForm,
+  ExportRecipesButton,
 } from "../../../components/domain/ProfitabilityForms";
 
 function formatARS(n: number) {
@@ -252,7 +253,10 @@ export default async function ProfitabilityPage() {
       </section>
 
       <section className="card stack">
-        <h2 style={{ fontSize: 16 }}>Costo actual por producto</h2>
+        <div className="row" style={{ alignItems: "center" }}>
+          <h2 style={{ fontSize: 16 }}>Costo actual por producto</h2>
+          <ExportRecipesButton />
+        </div>
         {products.map((p) => (
           <ProductCostRow
             key={p.id}

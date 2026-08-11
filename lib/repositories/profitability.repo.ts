@@ -82,6 +82,32 @@ export async function setChannelPrice(input: { productId: string; channelId: str
   return data;
 }
 
+/** Historial de precios de un producto en un canal -- channel_prices ya guarda cada versión (valid_from/valid_to cierran solas cuando se carga una nueva vía set_channel_price), esto solo lee lo que ya está, no hace falta ninguna tabla ni migración nueva. */
+export async function getPriceHistory(productId: string, channelId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("channel_prices")
+    .select("price, valid_from, valid_to")
+    .eq("product_id", productId)
+    .eq("channel_id", channelId)
+    .order("valid_from", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ value: Number(r.price), validFrom: r.valid_from as string, validTo: r.valid_to as string | null }));
+}
+
+/** Historial de descuentos de un producto en un canal -- mismo criterio que getPriceHistory, lee product_channel_discounts (0041) tal cual está. */
+export async function getDiscountHistory(productId: string, channelId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("product_channel_discounts")
+    .select("discount_percent, valid_from, valid_to")
+    .eq("product_id", productId)
+    .eq("channel_id", channelId)
+    .order("valid_from", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ value: Number(r.discount_percent), validFrom: r.valid_from as string, validTo: r.valid_to as string | null }));
+}
+
 export async function listChannelPrices() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase

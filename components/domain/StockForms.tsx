@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiAction } from "../../lib/client/api-action";
 import { toNumber } from "../../lib/client/number";
+import { HistoryPanel } from "./ProfitabilityForms";
 
 type StockItem = { id: string; name: string; unit: string; min_stock?: number; safety_stock?: number };
 type StockMovement = { id: string; stockItemId: string; quantity: number; direction: "entrada" | "salida"; date: string; originType: string };
@@ -64,9 +65,16 @@ export function StockItemCostForm({ item, currentCost }: { item: StockItem; curr
 
   if (!open) {
     return (
-      <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => setOpen(true)}>
-        {currentCost === null ? "Cargar costo" : `$${currentCost.toLocaleString("es-AR")}/${item.unit}`}
-      </button>
+      <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+        <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => setOpen(true)}>
+          {currentCost === null ? "Cargar costo" : `$${currentCost.toLocaleString("es-AR")}/${item.unit}`}
+        </button>
+        <HistoryPanel
+          label={`Historial de costo -- ${item.name}`}
+          fetchUrl={`/api/stock-items/${item.id}/cost/history`}
+          formatValue={(n) => `$${n.toLocaleString("es-AR")}/${item.unit}`}
+        />
+      </span>
     );
   }
 
