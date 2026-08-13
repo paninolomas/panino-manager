@@ -110,6 +110,24 @@ export async function upsertDailySalesClosing(input: { saleDate: string; orderCo
   return data;
 }
 
+/** Historial reciente del cierre rápido diario -- lo que faltaba (Fase 20b): sin esto, cargar un valor mal no se podía ver ni corregir salvo re-tipeando la fecha exacta a ciegas. */
+export async function listDailySalesClosings(limit = 30) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("daily_sales_closings")
+    .select("id, sale_date, order_count, revenue")
+    .order("sale_date", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data as { id: string; sale_date: string; order_count: number; revenue: number }[];
+}
+
+export async function deleteDailySalesClosing(id: string) {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("daily_sales_closings").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function recordSale(input: {
   channelId: string;
   externalOrderNumber?: string;

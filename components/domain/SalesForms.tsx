@@ -326,6 +326,94 @@ export function ProductsList({ products, channels, stockItems }: { products: { i
   );
 }
 
+function formatARSInt(n: number) {
+  return n.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
+}
+
+/** Fila del historial de cierres con edición inline (mismo patrón que GoalForms: "Editar" muestra inputs, "Guardar" reusa el upsert -- como la fecha es la clave, editar = volver a mandar la misma fecha con los valores corregidos). */
+function ClosingRow({ closing }: { closing: { id: string; sale_date: string; order_count: number; revenue: number } }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [orderCount, setOrderCount] = useState(String(closing.order_count));
+  const [revenue, setRevenue] = useState(String(closing.revenue));
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    const res = await fetch("/api/sales/daily-closing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        saleDate: closing.sale_date,
+        orderCount: toNumber(orderCount) || 0,
+        revenue: toNumber(revenue) || 0,
+      }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      setError("No se pudo guardar.");
+      return;
+    }
+    setEditing(false);
+    router.refresh();
+  }
+
+  async function remove() {
+    if (!confirm(`¿Eliminar el cierre del ${closing.sale_date}? No se puede deshacer.`)) return;
+    setDeleting(true);
+    const result = await apiAction(`/api/sales/daily-closing/${closing.id}`, "DELETE");
+    setDeleting(false);
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  if (editing) {
+    return (
+      <tr>
+        <td>{closing.sale_date}</td>
+        <td>
+          <input type="number" min="0" step="1" value={orderCount} onChange={(e) => setOrderCount(e.target.value)} style={{ width: 80 }} />
+        </td>
+        <td>
+          <input type="number" min="0" step="0.01" value={revenue} onChange={(e) => setRevenue(e.target.value)} style={{ width: 120 }} />
+        </td>
+        <td colSpan={2}>
+          {error && <span style={{ color: "var(--risk)", fontSize: 12, marginRight: 8 }}>{error}</span>}
+          <button className="btn" type="button" onClick={save} disabled={saving} style={{ padding: "4px 10px", fontSize: 13 }}>
+            {saving ? "…" : "Guardar"}
+          </button>{" "}
+          <button className="btn-secondary" type="button" onClick={() => setEditing(false)} style={{ padding: "4px 10px", fontSize: 13 }}>
+            Cancelar
+          </button>
+        </td>
+      </tr>
+    );
+  }
+
+  const avgTicket = closing.order_count > 0 ? closing.revenue / closing.order_count : 0;
+
+  return (
+    <tr>
+      <td>{closing.sale_date}</td>
+      <td>{closing.order_count}</td>
+      <td>{formatARSInt(closing.revenue)}</td>
+      <td>{formatARSInt(avgTicket)}</td>
+      <td>
+        {error && <span style={{ color: "var(--risk)", fontSize: 12, marginRight: 8 }}>{error}</span>}
+        <button className="btn-secondary" type="button" onClick={() => setEditing(true)} style={{ padding: "4px 10px", fontSize: 13 }}>
+          Editar
+        </button>{" "}
+        <button className="btn-secondary" type="button" onClick={remove} disabled={deleting} style={{ padding: "4px 10px", fontSize: 13 }}>
+          {deleting ? "…" : "Eliminar"}
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -338,8 +426,12 @@ function todayIso(): string {
  * movimiento de caja ni afecta Rentabilidad. Si el mismo día se carga
  * también el detalle en "Registrar venta", el detalle tiene prioridad y
  * este cierre queda ignorado para ese día (ver daily_sales_series).
+ *
+ * `closings` es el historial reciente (Fase 20b) -- se muestra debajo del
+ * formulario con edición inline y borrado, porque cargar un número mal sin
+ * forma de corregirlo era un bug real reportado por el usuario.
  */
-export function DailyClosingForm() {
+export function DailyClosingForm({ closings }: { closings: { id: string; sale_date: string; order_count: number; revenue: number }[] }) {
   const router = useRouter();
   const [saleDate, setSaleDate] = useState(todayIso());
   const [orderCount, setOrderCount] = useState("");
@@ -368,34 +460,60 @@ export function DailyClosingForm() {
       return;
     }
     setSuccess(true);
+    setOrderCount("");
+    setRevenue("");
     router.refresh();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="stack">
-      {error && <div className="error-banner">{error}</div>}
-      {success && <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Cierre guardado.</p>}
-      <div className="field">
-        <label>Fecha</label>
-        <input required type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
-      </div>
-      <div className="field">
-        <label>Pedidos</label>
-        <input required type="number" min="0" step="1" value={orderCount} onChange={(e) => setOrderCount(e.target.value)} />
-      </div>
-      <div className="field">
-        <label>Monto del día (bruto)</label>
-        <input required type="number" min="0" step="0.01" value={revenue} onChange={(e) => setRevenue(e.target.value)} />
-      </div>
-      {orderCountNum > 0 && (
-        <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>
-          Ticket promedio: {avgTicket.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
-        </p>
+    <div className="stack">
+      <form onSubmit={handleSubmit} className="stack">
+        {error && <div className="error-banner">{error}</div>}
+        {success && <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Cierre guardado.</p>}
+        <div className="field">
+          <label>Fecha</label>
+          <input required type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Pedidos</label>
+          <input required type="number" min="0" step="1" value={orderCount} onChange={(e) => setOrderCount(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>Monto del día (bruto)</label>
+          <input required type="number" min="0" step="0.01" value={revenue} onChange={(e) => setRevenue(e.target.value)} />
+        </div>
+        {orderCountNum > 0 && (
+          <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>
+            Ticket promedio: {avgTicket.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
+          </p>
+        )}
+        <button className="btn" type="submit" disabled={loading}>
+          {loading ? "Guardando…" : "Guardar cierre del día"}
+        </button>
+      </form>
+
+      {closings.length > 0 && (
+        <>
+          <hr className="ticket-rule" />
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Pedidos</th>
+                <th>Monto</th>
+                <th>Ticket prom.</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {closings.map((c) => (
+                <ClosingRow key={c.id} closing={c} />
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
-      <button className="btn" type="submit" disabled={loading}>
-        {loading ? "Guardando…" : "Guardar cierre del día"}
-      </button>
-    </form>
+    </div>
   );
 }
 

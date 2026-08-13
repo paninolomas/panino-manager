@@ -1,4 +1,4 @@
-import { listChannels, listProducts, listSalesProducts } from "../../../lib/repositories/sales.repo";
+import { listChannels, listProducts, listSalesProducts, listDailySalesClosings } from "../../../lib/repositories/sales.repo";
 import { listStockItems, listStockItemCosts } from "../../../lib/repositories/stock.repo";
 import { requireSession } from "../../../lib/auth/session";
 import { NewSaleForm, NewProductForm, ProductsList, DailyClosingForm } from "../../../components/domain/SalesForms";
@@ -7,11 +7,12 @@ export default async function SalesPage() {
   const profile = await requireSession();
   // Fase 1.1 item 1: el empleado nunca consulta la tabla products directamente
   // (RLS se lo impide) -- usa la función segura que no expone current_cost.
-  const [channels, products, stockItemsRaw, itemCosts] = await Promise.all([
+  const [channels, products, stockItemsRaw, itemCosts, dailyClosings] = await Promise.all([
     listChannels(),
     profile.role === "socio" ? listProducts() : listSalesProducts(),
     profile.role === "socio" ? listStockItems() : Promise.resolve([]),
     profile.role === "socio" ? listStockItemCosts() : Promise.resolve({} as Record<string, number>),
+    listDailySalesClosings(),
   ]);
   // El costo se fusiona acá (no en RecipeEditor) para que el preview en vivo
   // de la receta funcione desde el primer tipeo, sin depender de que la
@@ -30,7 +31,7 @@ export default async function SalesPage() {
           movimiento de caja ni afecta Rentabilidad — para eso seguí usando "Registrar venta" o
           "Ventas por período".
         </p>
-        <DailyClosingForm />
+        <DailyClosingForm closings={dailyClosings} />
       </section>
 
       <section className="card stack">
