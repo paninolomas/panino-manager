@@ -1,5 +1,19 @@
 import { createSupabaseServerClient } from "../supabase/server";
 
+/**
+ * Saldo actual por cuenta (Fase 22): "ningún saldo se edita directo, siempre
+ * se deriva de SUM(cash_movements)" (comentario original en 0004) -- esto
+ * simplemente expone esa suma. Ingreso suma, egreso resta; como reversal ya
+ * se registra como un movimiento más (no como un update), no hace falta
+ * ningún caso especial acá.
+ */
+export async function listAccountBalances() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("account_balances");
+  if (error) throw error;
+  return data as { account_id: string; balance: number }[];
+}
+
 export async function listAccounts() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
