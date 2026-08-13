@@ -326,6 +326,79 @@ export function ProductsList({ products, channels, stockItems }: { products: { i
   );
 }
 
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Cierre rápido diario (Fase 20): carga agregada de pedidos + monto bruto
+ * del día, sin discriminar producto ni canal. Pensado para los días que no
+ * hay tiempo de cargar el detalle en "Registrar venta" -- solo alimenta el
+ * objetivo semanal (pedidos/facturación/ticket promedio), no genera
+ * movimiento de caja ni afecta Rentabilidad. Si el mismo día se carga
+ * también el detalle en "Registrar venta", el detalle tiene prioridad y
+ * este cierre queda ignorado para ese día (ver daily_sales_series).
+ */
+export function DailyClosingForm() {
+  const router = useRouter();
+  const [saleDate, setSaleDate] = useState(todayIso());
+  const [orderCount, setOrderCount] = useState("");
+  const [revenue, setRevenue] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const orderCountNum = toNumber(orderCount) || 0;
+  const revenueNum = toNumber(revenue) || 0;
+  const avgTicket = orderCountNum > 0 ? revenueNum / orderCountNum : 0;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setSuccess(false);
+    const res = await fetch("/api/sales/daily-closing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ saleDate, orderCount: orderCountNum, revenue: revenueNum }),
+    });
+    setLoading(false);
+    if (!res.ok) {
+      setError("No se pudo guardar el cierre del día.");
+      return;
+    }
+    setSuccess(true);
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="stack">
+      {error && <div className="error-banner">{error}</div>}
+      {success && <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>Cierre guardado.</p>}
+      <div className="field">
+        <label>Fecha</label>
+        <input required type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
+      </div>
+      <div className="field">
+        <label>Pedidos</label>
+        <input required type="number" min="0" step="1" value={orderCount} onChange={(e) => setOrderCount(e.target.value)} />
+      </div>
+      <div className="field">
+        <label>Monto del día (bruto)</label>
+        <input required type="number" min="0" step="0.01" value={revenue} onChange={(e) => setRevenue(e.target.value)} />
+      </div>
+      {orderCountNum > 0 && (
+        <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>
+          Ticket promedio: {avgTicket.toLocaleString("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 })}
+        </p>
+      )}
+      <button className="btn" type="submit" disabled={loading}>
+        {loading ? "Guardando…" : "Guardar cierre del día"}
+      </button>
+    </form>
+  );
+}
+
 export function NewSaleForm({ channels, products }: { channels: Channel[]; products: Product[] }) {
   const router = useRouter();
   const [channelId, setChannelId] = useState(channels[0]?.id ?? "");

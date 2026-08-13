@@ -92,6 +92,24 @@ export async function updateProductCost(productId: string, currentCost: number) 
   return data;
 }
 
+/**
+ * Cierre rápido diario (Fase 20): upsert de pedidos + monto bruto para un
+ * día, sin discriminar por producto ni canal. Alimenta únicamente el motor
+ * de Objetivos (vía daily_sales_series) los días que no hay tiempo de
+ * cargar el detalle en "Registrar venta" -- ver comentario en la migración
+ * 0043_daily_sales_closings.sql para la regla de prioridad frente a orders.
+ */
+export async function upsertDailySalesClosing(input: { saleDate: string; orderCount: number; revenue: number }) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("upsert_daily_sales_closing", {
+    p_sale_date: input.saleDate,
+    p_order_count: input.orderCount,
+    p_revenue: input.revenue,
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function recordSale(input: {
   channelId: string;
   externalOrderNumber?: string;

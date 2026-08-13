@@ -1,7 +1,7 @@
 import { listChannels, listProducts, listSalesProducts } from "../../../lib/repositories/sales.repo";
 import { listStockItems, listStockItemCosts } from "../../../lib/repositories/stock.repo";
 import { requireSession } from "../../../lib/auth/session";
-import { NewSaleForm, NewProductForm, ProductsList } from "../../../components/domain/SalesForms";
+import { NewSaleForm, NewProductForm, ProductsList, DailyClosingForm } from "../../../components/domain/SalesForms";
 
 export default async function SalesPage() {
   const profile = await requireSession();
@@ -21,6 +21,17 @@ export default async function SalesPage() {
   return (
     <div className="stack">
       <h1>Ventas</h1>
+
+      <section className="card stack">
+        <h2 style={{ fontSize: 16 }}>Cierre rápido del día</h2>
+        <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>
+          Para los días que no da el tiempo de cargar venta por venta: pedidos + monto total del
+          día, ticket promedio se calcula solo. Alimenta el objetivo semanal, pero no genera
+          movimiento de caja ni afecta Rentabilidad — para eso seguí usando "Registrar venta" o
+          "Ventas por período".
+        </p>
+        <DailyClosingForm />
+      </section>
 
       <section className="card stack">
         <h2 style={{ fontSize: 16 }}>Registrar venta</h2>
