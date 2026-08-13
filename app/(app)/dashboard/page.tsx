@@ -84,7 +84,7 @@ export default async function DashboardPage() {
       <section className="card stack">
         <div className="label">Disponible real, por horizonte</div>
         <p style={{ fontSize: 13, color: "var(--ink-soft)" }}>
-          Caja + cobros esperados − comprometido (proveedores, comisiones, recurrentes) −
+          Caja + cobros esperados − comprometido (proveedores, comisiones, gastos con fecha de pago) −
           reserva ({formatARS(inputs.reserve)}), proyectado a cada plazo.
         </p>
         <hr className="ticket-rule" />

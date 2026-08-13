@@ -144,6 +144,18 @@ export async function createRecurringTemplate(input: {
  * suficiente para los horizontes de 30 días o menos que usa el producto; si
  * `day_of_month` ya pasó este mes, proyecta al mes siguiente.
  */
+/** Fase 23b: gastos pendientes con fecha estimada de pago cargada, en la forma que ya espera el motor financiero (amount/dueDate) -- reemplaza a la proyección de plantillas recurrentes como fuente de "comprometido" en los horizontes (ver comentario en cash-snapshot.ts). */
+export async function listCommittedExpenses() {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("expenses")
+    .select("amount, estimated_payment_date")
+    .eq("status", "pending")
+    .not("estimated_payment_date", "is", null);
+  if (error) throw error;
+  return (data ?? []).map((e) => ({ amount: Number(e.amount), dueDate: e.estimated_payment_date as string }));
+}
+
 export async function listRecurringExpenseProjections(asOfDate: string) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
