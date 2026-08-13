@@ -144,10 +144,17 @@ export function StockItemEditToggle({ item }: { item: StockItem }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
   const [unit, setUnit] = useState(item.unit);
+  const [minStock, setMinStock] = useState(String(item.min_stock ?? 0));
+  const [safetyStock, setSafetyStock] = useState(String(item.safety_stock ?? 0));
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
-    const result = await apiAction(`/api/stock-items/${item.id}`, "PATCH", { name, unit });
+    const result = await apiAction(`/api/stock-items/${item.id}`, "PATCH", {
+      name,
+      unit,
+      minStock: toNumber(minStock),
+      safetyStock: toNumber(safetyStock),
+    });
     if (!result.ok) return setError(result.error ?? null);
     setEditing(false);
     router.refresh();
@@ -162,17 +169,27 @@ export function StockItemEditToggle({ item }: { item: StockItem }) {
 
   if (editing) {
     return (
-      <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <div className="stack" style={{ alignItems: "flex-end" }}>
         {error && <span style={{ color: "var(--risk)", fontSize: 12 }}>{error}</span>}
-        <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: 140 }} />
-        <input value={unit} onChange={(e) => setUnit(e.target.value)} style={{ width: 70 }} />
-        <button className="btn" type="button" onClick={save} style={{ padding: "4px 10px", fontSize: 13 }}>
-          Guardar
-        </button>
-        <button className="btn-secondary" type="button" onClick={() => setEditing(false)} style={{ padding: "4px 10px", fontSize: 13 }}>
-          Cancelar
-        </button>
-      </span>
+        <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: 140 }} />
+          <input value={unit} onChange={(e) => setUnit(e.target.value)} style={{ width: 70 }} />
+        </span>
+        <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <label style={{ fontSize: 12, color: "var(--ink-soft)" }}>Stock mínimo</label>
+          <input type="number" min="0" step="0.01" value={minStock} onChange={(e) => setMinStock(e.target.value)} style={{ width: 80 }} />
+          <label style={{ fontSize: 12, color: "var(--ink-soft)" }}>Stock de seguridad</label>
+          <input type="number" min="0" step="0.01" value={safetyStock} onChange={(e) => setSafetyStock(e.target.value)} style={{ width: 80 }} />
+        </span>
+        <span style={{ display: "flex", gap: 6 }}>
+          <button className="btn" type="button" onClick={save} style={{ padding: "4px 10px", fontSize: 13 }}>
+            Guardar
+          </button>
+          <button className="btn-secondary" type="button" onClick={() => setEditing(false)} style={{ padding: "4px 10px", fontSize: 13 }}>
+            Cancelar
+          </button>
+        </span>
+      </div>
     );
   }
 
