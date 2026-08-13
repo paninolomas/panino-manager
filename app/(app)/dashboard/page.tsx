@@ -1,4 +1,5 @@
 import { listPendingSettlements } from "../../../lib/repositories/settlements.repo";
+import { listExpenses } from "../../../lib/repositories/expenses.repo";
 import { getStandardHorizons } from "../../../lib/services/cash-snapshot";
 import { calculateBalancesByAccount } from "../../../lib/services/financial-engine";
 import { requireSession } from "../../../lib/auth/session";
@@ -31,10 +32,23 @@ export default async function DashboardPage() {
   }
 
   const asOfDate = new Date().toISOString().slice(0, 10);
-  const [{ horizons, inputs }, pendingSettlements] = await Promise.all([
+  const [{ horizons, inputs }, pendingSettlements, expenses] = await Promise.all([
     getStandardHorizons(asOfDate),
     listPendingSettlements(),
+    listExpenses(),
   ]);
+
+  // Gastos pendientes con fecha estimada de pago cargada (Fase 23), atrasados
+  // primero, hasta 7 días para adelante -- los que no tienen fecha estimada
+  // no aparecen acá (se cargaron sin esa info todavía, siguen visibles en
+  // Gastos igual).
+  const upcomingExpenses = expenses
+    .filter((e) => e.status === "pending" && e.estimated_payment_date)
+    .filter((e) => {
+      const days = Math.floor((new Date(e.estimated_payment_date as string).getTime() - new Date(asOfDate).getTime()) / 86400000);
+      return days <= 7;
+    })
+    .sort((a, b) => (a.estimated_payment_date as string).localeCompare(b.estimated_payment_date as string));
 
   const balances = calculateBalancesByAccount(inputs.movements);
   const hasAnyMovement = inputs.movements.length > 0;
@@ -114,6 +128,37 @@ export default async function DashboardPage() {
             <span className="figure">{formatARS(Number(s.net_amount))}</span>
           </div>
         ))}
+      </section>
+
+      <section className="card stack">
+        <div className="row">
+          <span className="label">Gastos por vencer (7 días)</span>
+          <span className="figure">
+            {formatARS(upcomingExpenses.reduce((t, e) => t + Number(e.amount), 0))}
+          </span>
+        </div>
+        {upcomingExpenses.length === 0 && (
+          <p style={{ color: "var(--ink-soft)" }}>
+            No hay gastos con fecha estimada de pago cargada para los próximos 7 días.
+          </p>
+        )}
+        {upcomingExpenses.map((e) => {
+          const isOverdue = (e.estimated_payment_date as string) < asOfDate;
+          return (
+            <div key={e.id} className="row">
+              <span>
+                {e.description}{" "}
+                <span style={{ color: isOverdue ? "var(--risk)" : "var(--ink-soft)", fontSize: 12 }}>
+                  {isOverdue ? "vencido " : "vence "}
+                  {e.estimated_payment_date}
+                </span>
+              </span>
+              <span className="figure" style={{ color: isOverdue ? "var(--risk)" : "var(--ink)" }}>
+                {formatARS(Number(e.amount))}
+              </span>
+            </div>
+          );
+        })}
       </section>
     </div>
   );

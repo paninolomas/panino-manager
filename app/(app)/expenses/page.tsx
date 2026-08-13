@@ -43,6 +43,7 @@ export default async function ExpensesPage() {
               date: e.date,
               category_id: e.category_id,
               recurring_template_id: e.recurring_template_id,
+              estimated_payment_date: e.estimated_payment_date,
             }}
             categoryName={categoryName(e.category_id)}
             categories={categories}

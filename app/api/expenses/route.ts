@@ -9,6 +9,7 @@ const schema = z.object({
   amount: z.number().positive(),
   date: z.string(),
   supplierId: z.string().uuid().optional(),
+  estimatedPaymentDate: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {

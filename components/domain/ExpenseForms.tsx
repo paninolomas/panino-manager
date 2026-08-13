@@ -7,7 +7,15 @@ import { toNumber } from "../../lib/client/number";
 
 type Category = { id: string; name: string; type: string };
 type Account = { id: string; name: string };
-type Expense = { id: string; description: string; amount: number; date: string; category_id: string; recurring_template_id?: string | null };
+type Expense = {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  category_id: string;
+  recurring_template_id?: string | null;
+  estimated_payment_date?: string | null;
+};
 
 /** Botón "Marcar como fijo" (Fase 21): convierte este gasto puntual en plantilla recurrente -- a partir de ahí se regenera solo cada mes (generate_recurring_expenses, llamado al abrir Gastos). Si ya está marcado, muestra el badge "Fijo" con opción de desmarcar. */
 function RecurringToggle({ expenseId, isRecurring }: { expenseId: string; isRecurring: boolean }) {
@@ -66,6 +74,7 @@ export function ExpenseRow({
   const [description, setDescription] = useState(expense.description);
   const [amount, setAmount] = useState(String(expense.amount));
   const [categoryId, setCategoryId] = useState(expense.category_id);
+  const [estimatedPaymentDate, setEstimatedPaymentDate] = useState(expense.estimated_payment_date ?? "");
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
@@ -73,6 +82,7 @@ export function ExpenseRow({
       description,
       amount: toNumber(amount),
       categoryId,
+      estimatedPaymentDate: estimatedPaymentDate || null,
     });
     if (!result.ok) return setError(result.error ?? null);
     setEditing(false);
@@ -97,6 +107,10 @@ export function ExpenseRow({
             ))}
           </select>
           <input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ width: 110 }} />
+        </div>
+        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+          <label style={{ fontSize: 13, color: "var(--ink-soft)" }}>Fecha estimada de pago</label>
+          <input type="date" value={estimatedPaymentDate} onChange={(e) => setEstimatedPaymentDate(e.target.value)} style={{ width: 160 }} />
           <button className="btn" type="button" onClick={save}>
             Guardar
           </button>
@@ -112,6 +126,9 @@ export function ExpenseRow({
     <div className="row" style={{ alignItems: "center" }}>
       <span>
         {expense.description} · <span style={{ color: "var(--ink-soft)" }}>{categoryName}</span>
+        {expense.estimated_payment_date && (
+          <span style={{ color: "var(--ink-soft)", fontSize: 12 }}> · vence {expense.estimated_payment_date}</span>
+        )}
       </span>
       <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <span className="figure">{formatARS(expense.amount)}</span>
@@ -256,6 +273,7 @@ export function NewExpenseForm({ categories }: { categories: Category[] }) {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [estimatedPaymentDate, setEstimatedPaymentDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -266,7 +284,13 @@ export function NewExpenseForm({ categories }: { categories: Category[] }) {
     const res = await fetch("/api/expenses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ categoryId, description, amount: toNumber(amount), date }),
+      body: JSON.stringify({
+        categoryId,
+        description,
+        amount: toNumber(amount),
+        date,
+        estimatedPaymentDate: estimatedPaymentDate || undefined,
+      }),
     });
     setLoading(false);
     if (!res.ok) {
@@ -275,6 +299,7 @@ export function NewExpenseForm({ categories }: { categories: Category[] }) {
     }
     setDescription("");
     setAmount("");
+    setEstimatedPaymentDate("");
     router.refresh();
   }
 
@@ -304,6 +329,10 @@ export function NewExpenseForm({ categories }: { categories: Category[] }) {
       <div className="field">
         <label>Fecha</label>
         <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
+      </div>
+      <div className="field">
+        <label>Fecha estimada de pago (opcional)</label>
+        <input type="date" value={estimatedPaymentDate} onChange={(e) => setEstimatedPaymentDate(e.target.value)} />
       </div>
       <button className="btn" type="submit" disabled={loading}>
         {loading ? "Guardando…" : "Registrar gasto"}

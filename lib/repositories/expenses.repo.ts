@@ -40,7 +40,7 @@ export async function listExpenses() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("expenses")
-    .select("id, description, amount, date, status, category_id, supplier_id, recurring_template_id")
+    .select("id, description, amount, date, status, category_id, supplier_id, recurring_template_id, estimated_payment_date")
     .order("date", { ascending: false });
   if (error) throw error;
   return data;
@@ -53,6 +53,7 @@ export async function createExpense(input: {
   amount: number;
   date: string;
   supplierId?: string;
+  estimatedPaymentDate?: string;
 }) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -64,6 +65,7 @@ export async function createExpense(input: {
       amount: input.amount,
       date: input.date,
       supplier_id: input.supplierId ?? null,
+      estimated_payment_date: input.estimatedPaymentDate ?? null,
     })
     .select()
     .single();
@@ -72,14 +74,14 @@ export async function createExpense(input: {
 }
 
 /**
- * Editar un gasto PENDIENTE (monto/fecha/descripción/categoría). Una vez
- * pagado, el trigger guard_expense_immutability (0005) rechaza cambios de
- * monto/fecha -- misma lógica que updateObligation, la validación real vive
- * en la base, no acá.
+ * Editar un gasto PENDIENTE (monto/fecha/descripción/categoría/fecha
+ * estimada de pago). Una vez pagado, el trigger guard_expense_immutability
+ * (0005) rechaza cambios de monto/fecha -- misma lógica que
+ * updateObligation, la validación real vive en la base, no acá.
  */
 export async function updateExpense(
   expenseId: string,
-  input: { description?: string; amount?: number; date?: string; categoryId?: string }
+  input: { description?: string; amount?: number; date?: string; categoryId?: string; estimatedPaymentDate?: string | null }
 ) {
   const supabase = await createSupabaseServerClient();
   const patch: Record<string, unknown> = {};
@@ -87,6 +89,7 @@ export async function updateExpense(
   if (input.amount !== undefined) patch.amount = input.amount;
   if (input.date !== undefined) patch.date = input.date;
   if (input.categoryId !== undefined) patch.category_id = input.categoryId;
+  if (input.estimatedPaymentDate !== undefined) patch.estimated_payment_date = input.estimatedPaymentDate;
   const { data, error } = await supabase.from("expenses").update(patch).eq("id", expenseId).select().single();
   if (error) throw error;
   return data;

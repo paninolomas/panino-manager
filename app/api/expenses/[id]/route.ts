@@ -8,6 +8,7 @@ const schema = z.object({
   amount: z.number().positive().optional(),
   date: z.string().optional(),
   categoryId: z.string().uuid().optional(),
+  estimatedPaymentDate: z.string().nullable().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
