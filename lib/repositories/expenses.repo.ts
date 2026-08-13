@@ -40,7 +40,7 @@ export async function listExpenses() {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("expenses")
-    .select("id, description, amount, date, status, category_id, supplier_id")
+    .select("id, description, amount, date, status, category_id, supplier_id, recurring_template_id")
     .order("date", { ascending: false });
   if (error) throw error;
   return data;
@@ -164,3 +164,30 @@ export async function listRecurringExpenseProjections(asOfDate: string) {
     return { amount: Number(t.amount), dueDate };
   });
 }
+
+/** Marca un gasto ya cargado como "fijo" (Fase 21): crea la plantilla recurrente con su categoría/descripción/monto/día del mes, y a partir de ahí generate_recurring_expenses lo repone solo cada mes. */
+export async function markExpenseAsRecurring(expenseId: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("mark_expense_as_recurring", { p_expense_id: expenseId });
+  if (error) throw error;
+  return data;
+}
+
+/** Desmarca un gasto como fijo -- por default también desactiva la plantilla (deja de generarse el mes que viene). */
+export async function unmarkExpenseAsRecurring(expenseId: string, deactivateTemplate = true) {
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("unmark_expense_as_recurring", {
+    p_expense_id: expenseId,
+    p_deactivate_template: deactivateTemplate,
+  });
+  if (error) throw error;
+}
+
+/** Idempotente -- llamar al cargar la página de Gastos. Genera el gasto pendiente del mes actual para cada plantilla fija activa que todavía no lo tenga (Fase 21). Devuelve cuántos generó. */
+export async function ensureRecurringExpensesGenerated(asOfDate: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("generate_recurring_expenses", { p_as_of: asOfDate });
+  if (error) throw error;
+  return data as number;
+}
+

@@ -7,7 +7,47 @@ import { toNumber } from "../../lib/client/number";
 
 type Category = { id: string; name: string; type: string };
 type Account = { id: string; name: string };
-type Expense = { id: string; description: string; amount: number; date: string; category_id: string };
+type Expense = { id: string; description: string; amount: number; date: string; category_id: string; recurring_template_id?: string | null };
+
+/** Botón "Marcar como fijo" (Fase 21): convierte este gasto puntual en plantilla recurrente -- a partir de ahí se regenera solo cada mes (generate_recurring_expenses, llamado al abrir Gastos). Si ya está marcado, muestra el badge "Fijo" con opción de desmarcar. */
+function RecurringToggle({ expenseId, isRecurring }: { expenseId: string; isRecurring: boolean }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle() {
+    if (isRecurring && !confirm("¿Desmarcar como fijo? Deja de generarse automáticamente los próximos meses.")) return;
+    setLoading(true);
+    setError(null);
+    const result = await apiAction(`/api/expenses/${expenseId}/${isRecurring ? "unmark-recurring" : "mark-recurring"}`, "POST", {});
+    setLoading(false);
+    if (!result.ok) return setError(result.error ?? null);
+    router.refresh();
+  }
+
+  if (isRecurring) {
+    return (
+      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {error && <span style={{ color: "var(--risk)", fontSize: 12 }}>{error}</span>}
+        <span style={{ fontSize: 12, color: "var(--ink-soft)", border: "1px solid var(--border)", borderRadius: 4, padding: "2px 6px" }}>
+          Fijo
+        </span>
+        <button className="btn-secondary" style={{ padding: "4px 8px", fontSize: 12 }} type="button" onClick={toggle} disabled={loading}>
+          {loading ? "…" : "Desmarcar"}
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span>
+      {error && <span style={{ color: "var(--risk)", fontSize: 12, marginRight: 6 }}>{error}</span>}
+      <button className="btn-secondary" style={{ padding: "4px 8px", fontSize: 12 }} type="button" onClick={toggle} disabled={loading}>
+        {loading ? "…" : "Marcar como fijo"}
+      </button>
+    </span>
+  );
+}
 
 /** Fila de gasto PENDIENTE con editar + el botón de pagar que ya existía. Solo pendientes -- pagado es inmutable por trigger (0005), ni se muestra el editar. */
 export function ExpenseRow({
@@ -75,6 +115,7 @@ export function ExpenseRow({
       </span>
       <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <span className="figure">{formatARS(expense.amount)}</span>
+        <RecurringToggle expenseId={expense.id} isRecurring={!!expense.recurring_template_id} />
         <button className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 13 }} type="button" onClick={() => setEditing(true)}>
           Editar
         </button>
